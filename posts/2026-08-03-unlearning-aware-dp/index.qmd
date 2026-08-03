@@ -197,21 +197,6 @@ one coordinate that must **not** be protected, and only removal neighbours make
 sense here — unlike in DP, where removal and substitution are interchangeable up
 to a factor of two.
 
-## Open questions
-
-- **Q1.** Is @prp-necessary tight? $\U$ processes all of $\Df$ in one call rather
-  than $k$ adaptive steps, so a better-than-$k\varepsilon$ bound may exist for
-  specific $\U$.
-- **Q2.** Without the no-op axiom the chain of @prp-necessary never reaches
-  $\A(\Dr)$, the procedure gap stays unconstrained, and the two definitions
-  become incomparable. Which deployed $\U$ actually satisfy the axiom?
-- **Q3.** Sequential requests are a composition on $\tilde{\mathcal{Z}}^{*}$ with
-  an adaptively chosen status vector. Does the typed budget compose, and does the
-  adaptivity failure of @chourasia2023forget survive the reformulation?
-- **Q4.** RULI's shadow models already give the three populations of @eq-three,
-  so the $Q$ / $R$ gap can be measured directly. On standard benchmarks, how much
-  of the leakage reported by retrain-referenced audits is just procedure bias?
-
 ## References
 
 ::: {#refs}

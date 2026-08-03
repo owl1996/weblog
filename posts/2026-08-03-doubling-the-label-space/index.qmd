@@ -1,9 +1,9 @@
 ---
 title: "Doubling the label space: extracting a concept without training two models"
-description: "When a secondary binary attribute is known at fit time, promoting it into the label space makes the concept readable as a direction in logit space — and fixes the scale that contrastive decoding leaves to a hyperparameter."
+description: "The 2C construction: when a secondary binary attribute is known at fit time, promoting it into the label space makes the concept readable as a direction in logit space."
 author: "Virgile Dine"
 date: "2026-08-03"
-categories: [logit-space, concept-extraction, contrastive-decoding, guidance]
+categories: [logit-space, concept-extraction, 2C, proxy-models]
 bibliography: ../../references.bib
 image: ""
 draft: false
@@ -14,14 +14,16 @@ Suppose the training data carries a primary label $y \in \{1,\dots,C\}$ **and** 
 binary tag $s \in \{\mathsf{r}, \mathsf{f}\}$ that is known while fitting but
 irrelevant at inference: retain/forget, clean/noisy, real/synthetic,
 source/target, poisoned/benign. The usual reflex is to fit one model per value of
-$s$ and combine them afterwards. This note argues for the other order.
+$s$ and combine them afterwards. This note argues for the other order, and calls
+the result the **2C construction**.
 
 > Fit a single model on the product space $(y, s)$ rather than mixing separate
 > models, because joint normalisation turns the attribute into an exploitable
 > direction in logit space.
 
-The construction came out of a machine-unlearning problem, but nothing in it is
-about forgetting. What follows is the general version.
+2C came out of a machine-unlearning problem, but nothing in it is about
+forgetting. What follows is the general version: a way of extracting a concept
+that you already know how to label.
 
 ## Where the normalisation happens
 
@@ -141,98 +143,35 @@ logit space, and it can be used in two ways:
 - **by distillation** — fold the correction back into the parameters when the
   network is available.
 
-The structural point is that the concept is extracted **once** and then applied at
-whatever strength one wants. That is not what fine-tuning does: there, extraction
-and application are the same optimisation trajectory, and there is no object left
-over that can be turned up, turned down, or merely measured.
-
-## Fixing $\eta$ instead of guessing it
-
-The scale $\eta$ need not be a tuned hyperparameter. Define
-
-$$
-\Delta\gamma(\eta) \;=\; \E\Bigl[\,
-\mathrm{LSE}\bigl(f(x) + \eta\,\Delta M(x)\bigr) - \mathrm{LSE}\bigl(f(x)\bigr)
-\Bigr],
-$$ {#eq-gamma}
-
-with $\mathrm{LSE}$ the log-sum-exp of the logit vector — in words, the average
-change in the model's log-normaliser when the correction is applied at strength
-$\eta$.
-
-Three facts pin it down. $\mathrm{LSE}$ is convex and $\eta \mapsto f(x) + \eta
-\Delta M(x)$ is affine, so $\Delta\gamma$ is convex; it vanishes at $\eta = 0$ by
-construction; and its derivative there is a single expectation,
-
-$$
-\Delta\gamma'(0) \;=\; \E\bigl[\, \mathrm{softmax}(f(x))^{\top} \Delta M(x) \,\bigr],
-$$ {#eq-deriv}
-
-which is negative exactly when the full model is a better proxy for the data than
-the retain-only model — the admissibility criterion of the next section. A convex
-function that is zero at the origin and decreasing there has a unique second zero
-$\eta_{\max} > 0$, found by 1-D bisection on the data. Below it the correction is
-in the admissible range; above it, the perturbation costs more than it buys.
-
-This is the part worth flagging to anyone doing generative guidance. Classifier-free
-guidance [@ho2022classifier], contrastive decoding [@li2023contrastive] and
-activation steering all carry a scale — $w$, $\alpha$, a steering coefficient —
-that is set by hand and by taste. Here the same role is played by a quantity read
-off the data.
+The structural point is that the concept is extracted **once**, and only then
+applied, at whatever strength $\eta$ one wants. That is not what fine-tuning
+does: there, extraction and application are the same optimisation trajectory, and
+there is no object left over that can be turned up, turned down, or merely
+measured.
 
 ## An admissibility test that doubles as a concept detector
 
-@eq-deriv is worth isolating, because outside the unlearning setting it answers a
-question people usually answer by training something:
+Before extracting anything, 2C answers a prior question that people usually
+answer by training something and looking at the result:
 
 > Is the attribute $s$ actually encoded in this representation, at the layer where
 > the proxy is attached?
 
-Operationally it is a comparison of two proxy likelihoods — does the full
-$2C$ model explain the data better than its $\mathsf r$-only restriction — which
-is one sum over the dataset, no gradients, negligible next to a single
-optimisation step.
+The test compares two proxy likelihoods: the concept is exploitable when the full
+$2C$ model explains the data better than its $\mathsf r$-only restriction. That
+is a single sum over the dataset, with no gradient computation anywhere —
+negligible next to one optimisation step.
 
 A negative test is information, not a failure. It says the concept is not
 linearly present at that layer, and the correct response is to do nothing, or to
 change proxy family or layer — not to push harder. In the Gaussian family this
 happens systematically when the subgroup is not separated at first and second
-order, and the honest diagnosis is "there is nothing to extract here".
+order, and the honest diagnosis is then "there is nothing to extract here", not
+"the method missed it".
 
 Where to attach the proxy: an intermediate layer. Early layers have no class
 geometry yet; the last ones are redundant with the logits and therefore cannot
 expose a difference the logits do not already express.
-
-## Nothing here needs Gaussians
-
-LDA and QDA are convenient, not load-bearing. What does the work is the doubled
-label space and the joint normalisation. A proxy learned by fine-tuning works
-just as well — and that is where the argument gets its sharpest form.
-
-UCD [@suriyakumar2025ucd] trains **two** models — one proxy for the contaminated
-distribution, one for the corrupted model — and subtracts them in logit space
-with a mixing coefficient. That is exactly the structure $\log P_{\mathsf r} -
-\log P$ of @eq-signal. UCD is already extracting the retain and forget columns;
-it is just extracting them from two different networks.
-
-> Two separate models means two softmaxes, hence two independent normalisations.
-> The subtracted columns do not live on a common scale, and a free parameter is
-> needed to glue them back together. The $2C$ construction says: take both columns
-> from the *same* softmax.
-
-So the construction is the architectural answer to contrastive decoding — one
-head, doubled output space, both columns read jointly, and $\eta_{\max}$ in place
-of $\alpha$.
-
-For a language model this is a sketch rather than a result, but a concrete one:
-extend the output space from $V$ to $V \times \{\mathsf r, \mathsf f\}$, or more
-cheaply add a parallel head predicting $s$, or a tag token; fine-tune on data
-where each example carries its tag; marginalise $P(v \mid x) = \sum_s P(v, s \mid
-x)$ and read $\log P(v \mid x, s{=}\mathsf r) - \log P(v \mid x)$. One model, one
-normalisation, no coefficient to guess.
-
-Other proxy families slot in unchanged: the empirical measure (free, dimension-
-insensitive), kernel density estimates, Gaussian mixtures, anything learned.
 
 ## What else the tag can be
 
@@ -247,37 +186,5 @@ insensitive), kernel density estimates, Gaussian mixtures, anything learned.
 
 These are directions, not validated results. The last row deserves its own
 sentence, though, because it uses the machinery differently: one does not apply
-the correction at all, only measure its magnitude. The technique becomes an
-instrument rather than an intervention.
-
-## Limits
-
-1. **$s$ must be known at fit time.** This is supervised attribute extraction, not
-   unsupervised concept discovery.
-2. **Reprojecting from $2C$ to $C$** requires estimating $\pi_s(x)$, the
-   probability that a point carries tag $s$. The simple version uses a
-   feature-agnostic approximation $\pi_s(y)$.
-3. **The proxy degenerates at the empirical measure.** With a Dirac proxy the
-   signal only takes values $0$ or $-\infty$: the corrected model stops depending
-   on $\eta$ and the search for $\eta_{\max}$ has no object. It still works in
-   practice through distillation, but it short-circuits the guarantees described
-   above.
-4. **Existing empirical validation is narrow.** It covers light heads on a frozen
-   backbone, a regime where the Gaussian assumption is close to exact. On networks
-   trained end to end in high dimension the features have to be projected first,
-   and the observed gains are markedly smaller.
-
-## Open question
-
-Everything above assumes the tag is observed. The natural next question is what
-happens when it is not: treat $s$ as latent and infer it jointly with the $2C$
-fit, and the construction becomes a mixture model over an unobserved binary
-attribute — with the admissibility test as the natural check on whether the
-recovered split means anything. Whether the joint estimate stays identifiable,
-and whether $\eta_{\max}$ survives the extra uncertainty, is the part I do not
-know.
-
-## References
-
-::: {#refs}
-:::
+the correction at all, only measure its magnitude. 2C becomes an instrument
+rather than an intervention.
