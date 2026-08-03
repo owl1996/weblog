@@ -60,8 +60,13 @@ Both routes describe the same data. They do not produce the same object:
 
 > Mixing then normalising is not the same as normalising then mixing.
 
-@eq-mixture mixes on $X \mid y$; @eq-2c mixes on the posterior. That inversion is
-what makes the difference readable.
+@eq-mixture mixes on $X \mid y$; @eq-2c mixes on the posterior. As an identity
+the two agree — same components and same weights, and marginalising @eq-2c
+returns Bayes on @eq-mixture exactly. They come apart once each side is a
+*fitted family* rather than an identity: @eq-mixture has to model $X \mid y$ as a
+mixture, @eq-2c models each cell directly, and those are not the same set of
+estimable models. The slogan is about what one can fit, not about what one can
+write down.
 
 ```{=html}
 <figure style="margin:2rem 0;">
@@ -122,24 +127,28 @@ matrix. The explicit mixture, LDA-Mix, needs two — one of which is estimated o
 the $\mathsf f$ subset alone, which is usually the small one. The richer
 parametrisation is therefore also the cheaper and the better-conditioned; the
 extra means cost $O(Cd)$ parameters while the avoided covariance would have cost
-$O(d^2)$ estimated on few points.
+$O(d^2)$ estimated on few points. That trade is favourable while $C \lesssim d$;
+at language-model vocabulary sizes it runs the other way, and the argument for 2C
+there rests on the shared normalisation rather than on parameter count.
 
 ## The signal, and why it is reusable
 
-The fit itself says whether there is anything to read. Comparing two proxy
-likelihoods — does the full $2C$ model explain the data better than its
-$\mathsf r$-only restriction — answers the question one would otherwise settle by
-training something and looking at the result: *is $s$ actually encoded in this
-representation, at the layer where the proxy is attached?* It is a single sum
-over the dataset, no gradients anywhere, negligible next to one optimisation
-step. A negative answer is information rather than a failure: the concept is not
-linearly present at that layer, and the response is to do nothing, or to change
-proxy family or layer — not to push harder. In the Gaussian family this happens
-systematically when the subgroup is not separated at first and second order, and
-the honest diagnosis is "there is nothing to extract here", not "the method
-missed it". The proxy belongs at an intermediate layer: early layers have no
-class geometry yet, and the last ones are redundant with the logits, so they
-cannot expose a difference the logits do not already express.
+The fit itself says whether there is anything to read. Comparing the two proxies
+as descriptions of the retain population — does the $\mathsf r$-only reading
+account for it measurably better than the full model does — answers the question
+one would otherwise settle by training something and looking at the result: *is
+$s$ actually encoded in this representation, at the layer where the proxy is
+attached?* It is a single sum over the dataset, no gradients anywhere, negligible
+next to one optimisation step. A negative answer is information rather than a
+failure: the two readings coincide, so there is no direction to extract, and the
+response is to do nothing or to change proxy family or layer — not to push
+harder. In the Gaussian family this happens when the subgroup is not separated in
+the moments the proxy can see: means only, under a pooled covariance, and means
+plus covariances if one moves to QDA. The honest diagnosis is then "there is
+nothing to extract here", not "the method missed it". The proxy belongs at an
+intermediate layer: early layers have no class geometry yet, and the last ones
+are largely redundant with the logits, so they cannot expose a difference the
+logits do not already express.
 
 When the answer is positive, marginalise twice — over both tags, and within the
 $\mathsf r$ block only — and take the log-difference:
@@ -150,11 +159,27 @@ $$
 $$ {#eq-signal}
 
 In words: for each class, how much more (or less) probable that class becomes
-when the $\mathsf f$ cells are dropped from the competition. This is a vector in
-logit space, and it can be used in two ways:
+when the $\mathsf f$ cells are dropped from the competition.
 
-- **as a logit processor** — add $\eta \cdot \Delta M(x)$ to the output of a
-  black-box model, no weight access required;
+The signal has an exact information-theoretic reading. Since
+$P_{\mathsf r}(y \mid x) = P(y, \mathsf r \mid x) / P(\mathsf r \mid x)$,
+
+$$
+\Delta M_y(x) \;=\; \log \frac{P(y, \mathsf r \mid x)}{P(y \mid x)\, P(\mathsf r \mid x)}
+\;=\; \mathrm{PMI}\bigl(y ; \mathsf r \mid x\bigr),
+$$ {#eq-pmi}
+
+the pointwise mutual information between the class and the tag at $x$. So
+$\Delta M$ vanishes identically exactly when $y$ and $s$ are conditionally
+independent given $x$ under the fitted model: the signal measures a dependence
+rather than approximating one.
+
+It is also a vector in logit space, and can be used in two ways:
+
+- **as a logit processor** — add $\eta \cdot \Delta M(x)$ to the output of an
+  existing model: no weights and no gradients, though the proxy does read one
+  intermediate activation, so this is not black-box in the sense that a
+  logits-only method is;
 - **by distillation** — fold the correction back into the parameters when the
   network is available.
 
@@ -169,13 +194,20 @@ measured.
 $\Delta M$ is not new as an object. Logit-difference unlearning already computes
 something of that shape: ULD [@ji2024reversing] reads it off an assistant model
 trained beside the original, UCD [@suriyakumar2025ucd] off two proxy models
-differenced against each other. What is new is where it comes from. In both cases
-the correction is *assembled* rather than derived, and assembling costs something
+differenced against each other — the same shape as contrastive decoding
+[@li2023contrastive]. What is new is where it comes from. In all these cases the
+correction is *assembled* rather than derived, and assembling costs something
 specific:
 
 > Separate models mean separate softmaxes, hence independent normalisations. The
 > columns being differenced do not live in a common scale, and the mixing
 > coefficient is the free parameter that glues them back together.
+
+This is the argument classifier-free guidance [@ho2022classifier] already made
+against classifier guidance: one conditional model with a null token instead of
+two differenced networks, and the guidance direction read as a difference between
+two readings of that single distribution. 2C is that move with a secondary
+attribute in place of the conditioning.
 
 In 2C the $\mathsf r$, $\mathsf f$ and marginal columns all fall out of one
 normalisation. $\Delta M$ is then a difference between two readings of a single
@@ -197,8 +229,9 @@ at all — including to a correction assembled the other way.
 
 These are directions, not validated results. The last row deserves its own
 sentence, though, because it uses the machinery differently: one does not apply
-the correction at all, only measure its magnitude. 2C becomes an instrument
-rather than an intervention.
+the correction at all, only measure its magnitude — which, by @eq-pmi, is a
+conditional-dependence measure rather than a heuristic score. 2C becomes an
+instrument rather than an intervention.
 
 ## References
 

@@ -73,6 +73,12 @@ $$ {#eq-rectified}
 
 :::
 
+Sanity check: take $\U$ to be the identity. @def-rectified collapses to
+$\A(\D) \approx_{\varepsilon,\delta} \A(\D\setminus z)$ — plain differential
+privacy of the learner at $z$. Doing no unlearning at all is admissible exactly
+when the model was already private, which is what a privacy condition should
+say.
+
 The same bias sits in the audits, and this is where the rectified definition
 already has an empirical counterpart. U-LiRA and its descendants
 [@hayes2024inexact] score unlearned models against *retrained* shadow models:
@@ -84,14 +90,18 @@ $z$ was trained-then-unlearned or never trained — both worlds releasing the sa
 $\U\circ\A$, only the presence of $z$ changing. That is exactly @eq-rectified,
 with the procedure held fixed and the bias cancelled by construction.
 
-The rest of this note situates @def-rectified against @def-classical, then asks
-what it costs to write it as differential privacy.
+Two claims come out of this, and they should not be confused. As a
+**guarantee**, @def-classical is sound: @prp-sufficient below shows it implies
+the per-record statement up to a factor of two. It is merely loose, charging the
+budget of the whole forget set for something audited one record at a time — that
+much is just group privacy. As a **measurement**, the $P$ / $R$ statistic is
+biased, with no determined sign. The second claim is the one worth making.
 
 ## Formalisation
 
 ### Rectified versus classical
 
-The two definitions are related, but the gap is exactly group privacy.
+The two definitions are related, and the gap is exactly group privacy.
 
 ::: {#prp-sufficient name="the retraining model is a pivot"}
 
@@ -114,24 +124,29 @@ The pivot also exists only because $z$ is a forget point. For $z \in \Dr$ the
 references are $\A(\Dr)$ and $\A(\Dr\setminus z)$ and @eq-classical says nothing
 — protecting retain points is $\A$'s job.
 
+The converse needs an assumption usually left implicit: that an empty forget
+request is (nearly) a no-op. Demanding it exactly,
+$\U(\theta,\Dr,\emptyset) = \theta$, would be useless — every $\U$ that
+unconditionally takes a gradient step or injects noise fails it, which is most
+inexact ones. So state it approximately.
+
 ::: {#prp-necessary name="converse, lossy"}
 
-Assume the no-op axiom $\U(\theta,\Dr,\emptyset) = \theta$. Then @def-rectified
-at $(\varepsilon,\delta)$ implies @def-classical at
-$\bigl(k\varepsilon,\;\delta\,\tfrac{e^{k\varepsilon}-1}{e^{\varepsilon}-1}\bigr)$,
+Suppose $\U(\theta,\Dr,\emptyset) \approx_{\varepsilon_0,\delta_0} \theta$. Then
+@def-rectified at $(\varepsilon,\delta)$ implies @def-classical at
+$\bigl(k\varepsilon + \varepsilon_0,\;
+\delta\,\tfrac{e^{k\varepsilon}-1}{e^{\varepsilon}-1} + e^{k\varepsilon}\delta_0\bigr)$,
 $k = |\Df|$.
 
 :::
 
-*Proof.* Peel the forget points off one at a time; after $k$ steps the state is
-$\U(\A(\Dr),\Dr,\emptyset) = \A(\Dr)$. Constants are the standard group-privacy
-degradation [@dwork2014algorithmic]. $\square$
+*Proof.* Peel the forget points off one at a time — $k$ steps of @def-rectified,
+composing with the standard group-privacy constants [@dwork2014algorithmic] —
+reaching $\U(\A(\Dr),\Dr,\emptyset)$, then one triangle step to $\A(\Dr)$.
+$\square$
 
 So @def-classical is the group-level version of @def-rectified at group size
-$|\Df|$: sufficient but wasteful, charging the whole forget-set budget for a
-guarantee audited one record at a time. And the converse needs an axiom usually
-left implicit — any $\U$ that unconditionally takes a gradient step or injects
-noise violates it.
+$|\Df|$, up to how far $\U$ is from idling on an empty request.
 
 ### The data space has to change
 
@@ -177,25 +192,64 @@ the two. Then $\varepsilon_{\mathsf f}$ small with
 $\varepsilon_{\mathsf r} = \infty$ is unlearning;
 $\varepsilon_{\mathsf f} = \varepsilon_{\mathsf r}$ is differential privacy,
 which is why a DP learner unlearns for free; and
-$\varepsilon_{\mathsf f} \ll \varepsilon_{\mathsf r} < \infty$ is the regime
-nobody states.
+$\varepsilon_{\mathsf f} \ll \varepsilon_{\mathsf r} < \infty$ is the interesting
+one.
 
 > Unlearning is not a weaker privacy notion. It is differential privacy on a
 > typed data space with an **asymmetric budget** across record types.
 
-The typing also rules out substitution neighbours. Allow the *relabelling*
-neighbour $\tilde\D_{z:\mathsf r} \sim \tilde\D_{z:\mathsf f}$ — same $(x,y)$,
-status flipped — and chain it with the forget guarantee:
+Per-record budgets are not new — personalized differential privacy
+[@jorgensen2015conservative] and its descendants have assigned heterogeneous
+$\varepsilon$ for a decade. What is specific here is *what* the typing is: the
+unlearning status, which is not an external annotation about a data subject but
+an **input the mechanism reads**, since $\U$ is a function of $\Df$.
+
+That has a consequence for which neighbours are admissible. Take the
+*relabelling* pair $\tilde\D_{z:\mathsf r} \sim \tilde\D_{z:\mathsf f}$ — same
+$(x,y)$, status flipped — and suppose it were protected at level
+$\varepsilon_{\mathsf{rel}}$. Chaining with the forget guarantee,
 
 $$
-M(\tilde\D_{z:\mathsf r}) \;\approx\; M(\tilde\D_{z:\mathsf f}) \;\approx\; M(\tilde\D\setminus z).
+M(\tilde\D_{z:\mathsf r}) \;\approx_{\varepsilon_{\mathsf{rel}}}\; M(\tilde\D_{z:\mathsf f})
+\;\approx_{\varepsilon_{\mathsf f}}\; M(\tilde\D\setminus z),
 $$
 
-Keeping $z$ as a training point now looks like never having seen it: the two
-budgets collapse into one and $\A$ learns nothing from $z$. So the status is the
-one coordinate that must **not** be protected, and only removal neighbours make
-sense here — unlike in DP, where removal and substitution are interchangeable up
-to a factor of two.
+which forces $\varepsilon_{\mathsf r} \le \varepsilon_{\mathsf f} +
+\varepsilon_{\mathsf{rel}}$: keeping $z$ would look like never having seen it,
+and the asymmetry disappears. So the asymmetric regime is available only when
+the status is treated as **public**. This bans *cross-type* substitution, not
+substitution as such — swapping $(x,y,\mathsf f)$ for $(x',y',\mathsf f)$ within
+a type is a perfectly ordinary neighbourhood, and there the usual removal /
+substitution equivalence up to a factor of two should go through unchanged.
+
+## Scope
+
+Three things this does not do.
+
+It is **static**. @def-rectified fixes one partition and one release. Real
+deployments republish after each request, and requesters choose what to delete
+after seeing the previous models; @gupta2021adaptive show that non-adaptive
+deletion guarantees do not automatically compose in that setting. Nothing here
+addresses it.
+
+It buys **confidentiality, not control**. @def-classical forbids any channel
+about $\Df$ beyond what retraining leaks, which is none. @def-rectified only
+forbids per-record leakage: a $\U$ that releases the model plus a noisy
+aggregate over $\Df$ can satisfy it with small $\varepsilon_{\mathsf f}$ while
+failing @def-classical outright. Whether that is acceptable is a normative
+question, not a technical one, and there is a line of work arguing it is not —
+deletion-compliance by simulation against a world where the data was never
+supplied [@garg2020formalizing], and deletion-as-control as a requirement
+distinct from confidentiality [@cohen2023control]. Rectifying the *metric* does
+not settle the *right*.
+
+And the diagnosis is not unprecedented. @chourasia2023forget also reject the
+retraining reference, on adaptivity grounds rather than as a measurement bias.
+
+One caveat for anyone chasing a concrete constant: $|\Df|$ differs by one
+between the two worlds of @eq-rectified, so for any $\U$ whose noise is
+calibrated on the forget-set size, $\varepsilon_{\mathsf f}$ inherits a
+dependence on it.
 
 ## References
 
