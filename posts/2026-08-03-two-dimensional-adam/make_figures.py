@@ -115,8 +115,8 @@ def fig_gate(mode):
         ax.spines[side].set_visible(True)
         ax.spines[side].set_color(t["axis"])
 
-    ax.set_xlabel(r"$s_U$   (SNR on objective $U$)")
-    ax.set_ylabel(r"$s_C$   (SNR on constraint $C$)")
+    ax.set_xlabel(r"$s_1$   (SNR on task 1)")
+    ax.set_ylabel(r"$s_2$   (SNR on task 2)")
     ax.set_aspect("equal")
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03, ticks=[0, 0.25, .5, .75, 1])
     cb.outline.set_visible(False)
