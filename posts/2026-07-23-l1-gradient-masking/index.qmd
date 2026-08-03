@@ -1,5 +1,5 @@
 ---
-title: "l1-optimal gradient masking for two-task alignment"
+title: "Optimal gradient masking for two-task alignment"
 description: "An $\\mathcal{O}(d \\log d)$ algorithm that builds the $\\ell_1$-minimal binary mask resolving gradient conflict between two tasks."
 author: "Virgile Dine"
 date: "2026-07-23"
