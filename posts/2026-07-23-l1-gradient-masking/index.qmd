@@ -41,7 +41,7 @@ $$
 \Delta = \alpha g_1 + \beta g_2
 $$ {#eq-delta}
 
-a weighted sum. We seek a binary mask $m$ that ensures $\Delta$ strictly aligns
+a weighted sum. We seek a **binary mask** $m$ that ensures $\Delta$ strictly aligns
 with both tasks under masking:
 
 $$
