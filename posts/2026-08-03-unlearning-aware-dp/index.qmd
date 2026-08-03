@@ -1,0 +1,198 @@
+---
+title: "Certified unlearning compares the wrong two things"
+description: "The retraining reference $\\mathcal{A}(\\mathcal{D}_r)$ certifies efficacy, not privacy. Fixing the comparison forces the data space itself to become unlearning-aware."
+author: "Virgile Dine"
+date: "2026-08-03"
+categories: [certified-unlearning, differential-privacy, definitions, membership-inference]
+bibliography: ../../references.bib
+image: ""
+draft: false
+toc: true
+---
+
+## Context
+
+Certified unlearning [@guo2020certified; @sekhari2021remember] asks the output of
+an unlearning algorithm $\U$ to be indistinguishable from *retraining from
+scratch* on the retain set. Write $P \approx_{\varepsilon,\delta} Q$ for
+$(\varepsilon,\delta)$-indistinguishability of two output distributions.
+
+::: {#def-classical name="certified unlearning (retraining reference)"}
+
+For every $\D$ and every partition $\D = \Dr \sqcup \Df$,
+
+$$
+\U\bigl(\A(\D),\, \Dr,\, \Df\bigr) \;\approx_{\varepsilon,\delta}\; \A(\Dr).
+$$ {#eq-classical}
+
+:::
+
+This is presented as the unlearning analogue of differential privacy
+[@dwork2006calibrating]. It is not.
+
+## Idea
+
+> @eq-classical compares two *different mechanisms* on two *different inputs*.
+> Differential privacy compares one mechanism on two neighbouring inputs. The
+> second comparison is the one membership-inference audits actually run, and
+> writing it down forces each record to carry its retain/forget status.
+
+The left of @eq-classical is produced by $\U \circ \A$, the right by $\A$ alone.
+An adversary distinguishing them learns *which pipeline ran* — that unlearning
+happened rather than retraining — which says nothing about any particular $z$.
+@eq-classical is a **fidelity** condition on $\U$, dressed in privacy notation.
+
+RULI [@naderloui2025ruli] reaches the same split empirically, from the attack
+side, and it is worth borrowing their vocabulary. They separate three games:
+their **Game 3** (*efficacy*) has the adversary tell the unlearned model from the
+initially-trained one; their **Game 2** (*privacy*) fixes an adversary-chosen
+target set before unlearning, then asks whether a target $z$ was trained-then-unlearned
+or never trained at all. Both worlds of Game 2 release the *same* mechanism
+$\U \circ \A$; only the presence of $z$ changes.
+
+@eq-classical certifies Game 3. The literature reads it as a guarantee about
+Game 2. Those are different statements, and the rest of this note makes the
+difference precise.
+
+## Formalisation
+
+### The per-example definition
+
+RULI's Game 2, written as a pair of distributions over released models: for
+$z \in \Df$,
+
+$$
+\U\bigl(\A(\D),\, \Dr,\, \Df\bigr)
+\quad\text{versus}\quad
+\U\bigl(\A(\D \setminus z),\, \Dr,\, \Df \setminus z\bigr).
+$$ {#eq-perexample}
+
+::: {#def-perexample name="per-example certified unlearning"}
+
+$\U$ is $(\varepsilon,\delta)$-per-example-certified if the two distributions of
+@eq-perexample are $(\varepsilon,\delta)$-indistinguishable, for every $\D$,
+every partition, and every $z \in \Df$.
+
+:::
+
+The two definitions are related, but the gap is exactly group privacy.
+
+::: {#prp-sufficient name="the retraining model is a pivot"}
+
+@def-classical at $(\varepsilon,\delta)$ implies @def-perexample at
+$\bigl(2\varepsilon,\,(1+e^{\varepsilon})\delta\bigr)$.
+
+:::
+
+*Proof.* For $z \in \Df$, removing $z$ leaves the retain set untouched:
+$(\D\setminus z)_r = \Dr$. So @def-classical applied to $\D$ and to $\D\setminus z$
+certifies both sides of @eq-perexample against the **same** reference $\A(\Dr)$;
+conclude by the triangle inequality. $\square$
+
+The pivot exists only because $z$ is a forget point. For $z \in \Dr$ the
+references are $\A(\Dr)$ and $\A(\Dr\setminus z)$ and @eq-classical says nothing
+— protecting retain points is $\A$'s job.
+
+::: {#prp-necessary name="converse, lossy"}
+
+Assume the no-op axiom $\U(\theta,\Dr,\emptyset) = \theta$. Then @def-perexample
+at $(\varepsilon,\delta)$ implies @def-classical at
+$\bigl(k\varepsilon,\;\delta\,\tfrac{e^{k\varepsilon}-1}{e^{\varepsilon}-1}\bigr)$,
+$k = |\Df|$.
+
+:::
+
+*Proof.* Peel the forget points off one at a time; after $k$ steps the state is
+$\U(\A(\Dr),\Dr,\emptyset) = \A(\Dr)$. Constants are the standard group-privacy
+degradation [@dwork2014algorithmic]. $\square$
+
+So @def-classical is the group-level version of @def-perexample at group size
+$|\Df|$: sufficient but wasteful, charging the whole forget-set budget for a
+guarantee audited one record at a time. And the converse needs an axiom usually
+left implicit — any $\U$ that unconditionally takes a gradient step or injects
+noise violates it.
+
+### The data space has to change
+
+Now try to write @eq-perexample as $M(D) \approx M(D\setminus z)$. The
+obstruction is immediate: $\U\circ\A$ is not a function of a dataset. It takes
+three arguments, and the partition $(\Dr,\Df)$ is an extra input channel — same
+$\D$, different forget request, different output law. There is no mechanism on
+$\mathcal{Z}^{*}$ to apply DP to.
+
+Move the channel into the records. With
+$\mathcal{Z} = \mathcal{X}\times\mathcal{Y}$, put
+
+$$
+\tilde{\mathcal{Z}} \;=\; \mathcal{X} \times \mathcal{Y} \times \{\mathsf{r},\mathsf{f}\},
+$$ {#eq-augmented}
+
+so an **unlearning-aware dataset** $\tilde\D \in \tilde{\mathcal{Z}}^{*}$ is data,
+labels, *and* each record's retain/forget status. Writing $\pi,\pi_{\mathsf r},
+\pi_{\mathsf f}$ for the three projections, the single randomised mechanism
+
+$$
+M(\tilde\D) \;=\; \U\bigl(\A(\pi\tilde\D),\, \pi_{\mathsf r}\tilde\D,\, \pi_{\mathsf f}\tilde\D\bigr)
+$$ {#eq-mechanism}
+
+*is* a mechanism on a dataset, and @def-perexample is literally
+$M(\tilde\D) \approx_{\varepsilon,\delta} M(\tilde\D\setminus\tilde z)$ for
+$\tilde z = (x,y,\mathsf{f})$.
+
+### Two neighbourhoods, one asymmetry
+
+On $\tilde{\mathcal{Z}}^{*}$ the removal-neighbourhood splits by status, and
+nothing forces one budget on both:
+
+$$
+\tilde\D \sim_{\mathsf f} \tilde\D\setminus(x,y,\mathsf f),
+\qquad
+\tilde\D \sim_{\mathsf r} \tilde\D\setminus(x,y,\mathsf r).
+$$ {#eq-neighbours}
+
+Call $M$ $(\varepsilon_{\mathsf f},\varepsilon_{\mathsf r})$-private if it is
+$\varepsilon_{\mathsf f}$- and $\varepsilon_{\mathsf r}$-indistinguishable across
+the two. Then $\varepsilon_{\mathsf f}$ small with
+$\varepsilon_{\mathsf r} = \infty$ is unlearning;
+$\varepsilon_{\mathsf f} = \varepsilon_{\mathsf r}$ is differential privacy,
+which is why a DP learner unlearns for free; and
+$\varepsilon_{\mathsf f} \ll \varepsilon_{\mathsf r} < \infty$ is the regime
+nobody states.
+
+> Unlearning is not a weaker privacy notion. It is differential privacy on a
+> typed data space with an **asymmetric budget** across record types.
+
+The typing also forbids the reflex of substitution-neighbouring. Allow the
+*relabelling* neighbour $\tilde\D_{z:\mathsf r} \sim \tilde\D_{z:\mathsf f}$ —
+same $(x,y)$, status flipped — and it chains with $\varepsilon_{\mathsf f}$ to
+
+$$
+M(\tilde\D_{z:\mathsf r}) \approx M(\tilde\D_{z:\mathsf f}) \approx M(\tilde\D\setminus z),
+$$
+
+i.e. keeping $z$ is indistinguishable from never having seen it:
+$\varepsilon_{\mathsf r}$ collapses onto $\varepsilon_{\mathsf f}$ and $\A$
+learns nothing from $z$. The status coordinate is the one coordinate that must
+**not** be protected. Only removal is admissible — a genuine structural
+departure from DP, where removal and substitution differ by a harmless factor
+of two.
+
+## Open questions
+
+- **Q1.** Is @prp-necessary tight? $\U$ processes all of $\Df$ in one call rather
+  than $k$ adaptive steps, so a better-than-$k\varepsilon$ bound may exist for
+  specific $\U$.
+- **Q2.** Without the no-op axiom, @def-perexample implies nothing about
+  retraining fidelity. Are the two definitions then simply incomparable — the
+  formal counterpart of RULI's privacy/efficacy split?
+- **Q3.** Sequential requests are a composition on $\tilde{\mathcal{Z}}^{*}$ with
+  an adaptively chosen status vector. Does the typed budget compose, and does the
+  adaptivity failure of @chourasia2023forget survive the reformulation?
+- **Q4.** RULI's $\Lambda$ (privacy) and $\Psi$ (efficacy) likelihood-ratio tests
+  estimate the two comparisons separately. Can their gap be read as an empirical
+  lower bound on $\varepsilon_{\mathsf f}$ versus the group-level $k\varepsilon$?
+
+## References
+
+::: {#refs}
+:::
