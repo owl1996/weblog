@@ -1,0 +1,72 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Research Notes — Machine Unlearning"
+  description: "A research journal on machine unlearning: ideas, formalisations and open questions."
+  site-url: "https://owl1996.github.io/blog"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: posts.qmd
+        text: Posts
+      - href: about.qmd
+        text: About
+    right:
+      - icon: github
+        href: https://github.com/owl1996/blog
+        aria-label: GitHub
+  page-footer:
+    left: "© 2026 Virgile Dine — PhD research notes"
+    right: "Built with [Quarto](https://quarto.org)"
+
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+    css: styles.css
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    code-copy: true
+    html-math-method: mathjax
+
+# LaTeX / MathJax: custom macros available in every page
+include-in-header:
+  text: |
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']],
+          processEscapes: true,
+          macros: {
+            D: "\\mathcal{D}",
+            Df: "\\mathcal{D}_f",
+            Dr: "\\mathcal{D}_r",
+            A: "\\mathcal{A}",
+            U: "\\mathcal{U}",
+            E: "\\mathbb{E}",
+            R: "\\mathbb{R}",
+            argmin: "\\operatorname*{arg\\,min}",
+            argmax: "\\operatorname*{arg\\,max}"
+          }
+        }
+      };
+    </script>
+
+# BibTeX citations
+author: "Virgile Dine"
+
+bibliography: references.bib
+csl: https://www.zotero.org/styles/apa
+link-citations: true
+citations-hover: true
+
+execute:
+  freeze: auto
+
+editor: source

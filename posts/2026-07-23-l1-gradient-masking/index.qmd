@@ -1,0 +1,139 @@
+---
+title: "$\\ell_1$-optimal gradient masking for two-task alignment"
+description: "An $\\mathcal{O}(d \\log d)$ algorithm that builds the $\\ell_1$-minimal binary mask resolving gradient conflict between two tasks."
+author: "Virgile Dine"
+date: "2026-07-23"
+categories: [multi-task, gradient-conflict, optimisation, algorithms]
+bibliography: ../../references.bib
+image: ""
+draft: false
+toc: true
+---
+
+We introduce an efficient algorithm to resolve gradient conflicts for two-task
+learning. Given gradients $g_1, g_2 \in \R^d$ and weights $\alpha, \beta > 0$,
+we construct a binary mask $m \in \{0,1\}^d$ minimising $\|\mathbf{1} - m\|_1$
+while preserving strict alignment with both tasks. Our $\mathcal{O}(d \log d)$
+method yields an optimal $\ell_1$-sparse mask under strict alignment
+constraints.
+
+## Context
+
+The AND Mask [@parascandolo2020learning] is overly restrictive for the
+alignment constraints @eq-constraints below, whereas our method permits
+controlled disagreement. Unlike PCGrad [@yu2020gradient] or CAGrad
+[@liu2021conflict], which modify gradients via projections, our method
+guarantees sparsity through optimal $\ell_1$-minimal masking.
+
+## Idea
+
+> Gradient conflict between two tasks can be resolved without touching the
+> gradients themselves: it is enough to mask coordinates, and the $\ell_1$-minimal
+> mask is obtained by sorting them.
+
+## Formalisation
+
+### Problem
+
+Let $g_1, g_2 \in \R^d$ be task gradients, and
+
+$$
+\Delta = \alpha g_1 + \beta g_2
+$$ {#eq-delta}
+
+a weighted sum. We seek a binary mask $m$ that ensures $\Delta$ strictly aligns
+with both tasks under masking:
+
+$$
+\langle m \odot \Delta,\, g_1 \rangle \ >\ 0,
+\qquad
+\langle m \odot \Delta,\, g_2 \rangle \ >\ 0,
+$$ {#eq-constraints}
+
+(where $\odot$ denotes the element-wise product) while masking out as few
+coordinates as possible, i.e. minimising $\|\mathbf{1} - m\|_1$ — equivalently,
+$m$ is a *maximal* feasible mask. The inequalities are strict: with $\ge 0$ the
+null mask is feasible and the problem degenerates.
+
+### Method
+
+Only $\langle m \odot g_1, g_2 \rangle = \langle g_1, m \odot g_2 \rangle$ may be
+negative. The constraints @eq-constraints reduce to:
+
+$$
+\begin{aligned}
+-\langle m \odot g_1, g_2 \rangle &\ <\ \frac{\alpha}{\beta} \langle m \odot g_1, g_1 \rangle, \\[2pt]
+-\langle m \odot g_1, g_2 \rangle &\ <\ \frac{\beta}{\alpha} \langle m \odot g_2, g_2 \rangle.
+\end{aligned}
+$$ {#eq-ineq}
+
+Writing $S_{11}(m) = \langle m \odot g_1, g_1\rangle$, $S_{22}(m) = \langle m
+\odot g_2, g_2 \rangle$ and $S_{12}(m) = \langle m \odot g_1, g_2 \rangle$, both
+lines collapse into a single scalar test, and the **violation**
+
+$$
+V(m) \;=\; -S_{12}(m) \;-\; \min\!\left( \tfrac{\alpha}{\beta} S_{11}(m),\ \tfrac{\beta}{\alpha} S_{22}(m) \right)
+$$ {#eq-violation}
+
+must be brought below zero. Masking out coordinate $i$ lowers $-S_{12}$ by
+$|s_i|$, where $s_i = g_{1,i} g_{2,i}$, but it also shrinks the right-hand side.
+The net effect is exactly
+
+$$
+\Delta V \;=\; \tilde{s}_i \;=\;
+\begin{cases}
+s_i + \frac{\alpha}{\beta} g_{1,i}^2 & \text{if } \frac{\alpha}{\beta} S_{11} \le \frac{\beta}{\alpha} S_{22},\\[4pt]
+s_i + \frac{\beta}{\alpha} g_{2,i}^2 & \text{otherwise,}
+\end{cases}
+$$ {#eq-score}
+
+so it is $\tilde{s}_i$, not $s_i$, that ranks candidate coordinates.
+
+### Algorithm
+
+```text
+Optimal Masking
+
+Require: g1, g2 ∈ R^d,  α, β > 0
+
+  sA_i ← g1_i·g2_i + (α/β)·g1_i²          # score, S11 branch active
+  sB_i ← g1_i·g2_i + (β/α)·g2_i²          # score, S22 branch active
+  πA   ← argsort(sA);   πB ← argsort(sB)
+  m    ← 1_d
+  S11  ← ⟨g1, g1⟩;  S22 ← ⟨g2, g2⟩;  S12 ← ⟨g1, g2⟩
+
+  while  −S12 ≥ min( (α/β)·S11, (β/α)·S22 ):
+      π ← πA  if  (α/β)·S11 ≤ (β/α)·S22  else  πB
+      i ← next index of π with m_i = 1
+      if no such i:  return FAIL           # no strictly feasible mask exists
+      m_i ← 0
+      update:  S11 −= g1_i²,   S22 −= g2_i²,   S12 −= g1_i·g2_i
+
+  return m
+```
+
+### Optimality
+
+The greedy cancellation of the most negative $\tilde{s}_i$ guarantees
+$\ell_1$-optimality by minimising constraint violation per removed dimension: by
+@eq-score, $\tilde{s}_i$ *is* the change in violation, so each removal is the
+steepest one available. Ranking by the raw product $s_i$ instead is not
+optimal — it accounts for the drop in $-S_{12}$ while ignoring that the budget
+$\min(\frac{\alpha}{\beta}S_{11}, \frac{\beta}{\alpha}S_{22})$ shrinks along
+with it.
+
+### Complexity
+
+Dominated by the two `argsort` calls ($\mathcal{O}(d \log d)$) with
+$\mathcal{O}(d)$ updates; each order is scanned by a monotone pointer, so
+switching branches costs nothing asymptotically.
+
+## Open questions
+
+- **Limitation.** Extension to $n > 2$ gradients requires non-trivial
+  modification of the stopping condition.
+
+## References
+
+::: {#refs}
+:::

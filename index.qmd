@@ -1,0 +1,29 @@
+---
+title: "Research Notes — Machine Unlearning"
+subtitle: "Ideas, formalisations and open questions from an ongoing PhD"
+listing:
+  contents: posts
+  type: default
+  sort: "date desc"
+  categories: true
+  sort-ui: true
+  filter-ui: true
+  fields: [date, title, categories, reading-time, description]
+  feed: true
+page-layout: full
+title-block-banner: true
+---
+
+Welcome. This site is my **public research journal** on machine unlearning — the
+problem of making a trained model behave as if it had never seen some subset of
+its training data.
+
+I write here to think out loud: each post captures one idea, formalises it, and
+records what remains unclear. Posts are deliberately written in a reusable
+structure (*Context / Idea / Formalisation / Open questions / References*) so
+that they can be lifted more or less directly into my thesis manuscript later.
+
+Nothing here is peer-reviewed. Expect half-formed ideas, dead ends, and the
+occasional sign error.
+
+## Latest posts

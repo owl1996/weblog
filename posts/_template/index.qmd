@@ -1,0 +1,59 @@
+---
+title: "TITLE OF THE IDEA"
+description: "One sentence a future-me can scan in a listing."
+author: "Virgile Dine"
+date: "YYYY-MM-DD"
+categories: [tag1, tag2]
+bibliography: ../../references.bib
+draft: true
+toc: true
+---
+
+<!--
+  HOW TO USE THIS TEMPLATE
+  1. cp -r posts/_template posts/YYYY-MM-DD-short-slug
+  2. Fill in the front matter above (remove `draft: true` when ready).
+  3. Keep the five sections. They map onto a thesis subsection.
+-->
+
+## Context
+
+What is already known, and which gap this note sits in. Cite freely: [@key].
+
+## Idea
+
+The claim, stated in one blockquote before any maths.
+
+> ...
+
+Why it might be true. Why it might be false.
+
+## Formalisation
+
+Setup and notation. Available macros: $\D$, $\Df$, $\Dr$, $\A$, $\U$, $\E$,
+$\R$, $\argmin$, $\argmax$.
+
+$$
+\text{equation here}
+$$ {#eq-label}
+
+Reference it as @eq-label. State honestly what is proved vs. conjectured.
+
+<!-- Numbered environments. Prefix sets the kind: def- lem- thm- cor- prp- exm-
+     Quarto generates the "Definition 1" title itself — don't write it yourself. -->
+
+::: {#def-label name="name of the notion"}
+
+Statement here. Cite it elsewhere as @def-label.
+
+:::
+
+## Open questions
+
+- **Q1.** ...
+- **Q2.** ...
+
+## References
+
+::: {#refs}
+:::

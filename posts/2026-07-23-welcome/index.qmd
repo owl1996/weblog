@@ -1,0 +1,121 @@
+---
+title: "Certified unlearning as a distributional indistinguishability constraint"
+description: "A template post: restating (ε, δ)-certified unlearning as a constraint between the unlearned model and the retrained model, and asking what it costs."
+author: "Virgile Dine"
+date: "2026-07-23"
+categories: [certified-unlearning, differential-privacy, formalisation, template]
+bibliography: ../../references.bib
+image: ""
+draft: false
+toc: true
+---
+
+::: {.callout-note appearance="simple"}
+This is the **template post**. Copy this folder for every new idea and keep the
+five sections below. Each one maps onto a chunk of the thesis manuscript.
+:::
+
+## Context
+
+Machine unlearning asks for a mechanism that removes the influence of a subset of
+training data from an already-trained model. The gold standard is *retraining
+from scratch* on the retained data, which is correct by construction but
+computationally prohibitive at scale [@cao2015towards; @bourtoule2021machine].
+
+The literature splits roughly into two camps:
+
+1. **Exact unlearning** — restructure training so that deletion is cheap (sharding,
+   slicing, aggregation), as in SISA [@bourtoule2021machine].
+2. **Approximate unlearning** — perturb the trained parameters so that the result
+   is *statistically close* to a retrained model, typically via influence
+   functions or a Newton step [@guo2020certified; @sekhari2021remember].
+
+What follows concerns the second camp, and specifically what "close" is allowed
+to mean.
+
+## Idea
+
+The informal claim I want to make precise:
+
+> Certified unlearning is not a property of a model. It is a property of the
+> *pair* (learning algorithm, unlearning algorithm), and it is exactly a
+> differential-privacy-style indistinguishability constraint with the forget set
+> playing the role of the adjacent dataset.
+
+If that framing holds, then every lower bound known for differential privacy
+should transfer to a lower bound on the utility cost of certified unlearning —
+which would explain why approximate unlearning methods empirically plateau well
+before they reach retrain-level accuracy.
+
+## Formalisation
+
+Let $\D = \{z_1, \dots, z_n\}$ be the training set, $\Df \subset \D$ the forget
+set, and $\Dr = \D \setminus \Df$ the retain set. Let
+
+- $\A : \mathcal{Z}^n \to \Theta$ be the (randomised) learning algorithm,
+- $\U : \Theta \times \mathcal{Z}^n \times \mathcal{Z}^{|\Df|} \to \Theta$ be the
+  unlearning algorithm.
+
+::: {#def-certified name="$(\varepsilon, \delta)$-certified unlearning"}
+
+The pair $(\A, \U)$ achieves
+$(\varepsilon, \delta)$-certified unlearning if for every dataset $\D$, every
+forget set $\Df \subset \D$, and every measurable $S \subseteq \Theta$:
+
+$$
+\Pr\big[\,\U(\A(\D), \D, \Df) \in S \,\big]
+\;\le\; e^{\varepsilon}\,\Pr\big[\,\A(\Dr) \in S \,\big] \;+\; \delta,
+$$ {#eq-certified}
+
+and symmetrically with the two sides exchanged.
+
+:::
+
+Equation @eq-certified is precisely the DP inequality, with the "neighbouring
+dataset" relation replaced by "differs by the forget set". Two immediate
+consequences:
+
+**Composition.** Sequential deletion requests compose like DP mechanisms. For $k$
+requests handled by the same $\U$, basic composition gives $(k\varepsilon,
+k\delta)$, and advanced composition improves this to roughly
+
+$$
+\varepsilon_k \;\approx\; \varepsilon\sqrt{2k \log(1/\delta')} + k\,\varepsilon\,(e^{\varepsilon} - 1).
+$$
+
+This predicts a **deletion budget**: after enough requests the guarantee is
+vacuous and retraining becomes mandatory. That budget, not per-request cost, may
+be the real bottleneck in deployment.
+
+**Utility cost.** Writing $L(\theta; \Dr)$ for the retain-set risk and
+$\theta^\star = \argmin_{\theta} L(\theta; \Dr)$, the excess risk of any
+mechanism satisfying @eq-certified should obey a bound of the form
+
+$$
+\E\big[L(\U(\cdot); \Dr)\big] - L(\theta^\star; \Dr)
+\;=\; \Omega\!\left(\frac{\sqrt{d}}{\varepsilon\, |\Dr|}\right),
+$$
+
+by analogy with DP-ERM lower bounds. **I have not verified this transfer** — the
+adjacency relation is coarser here (a whole forget set, not one record), so the
+constant and possibly the rate should change.
+
+## Open questions
+
+- **Q1.** Does the DP-ERM lower bound actually transfer, or does the coarser
+  adjacency relation ($|\Df|$ records at once, known to the mechanism) break the
+  packing argument? This is the crux — worth a week.
+- **Q2.** @eq-certified quantifies over *all* forget sets. Real deletion requests
+  are not adversarial. Is there a meaningful average-case relaxation that buys
+  back utility without becoming unfalsifiable?
+- **Q3.** Membership inference attacks are routinely used to *evaluate*
+  unlearning. Under @eq-certified they are provably bounded — so a passing MIA
+  score is necessary but far from sufficient. What is the right audit?
+- **Q4.** Does the deletion budget above match what SISA-style exact methods pay
+  in storage? If the two curves cross, that crossing point is a deployment
+  guideline.
+
+## References
+
+::: {#refs}
+:::

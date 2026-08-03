@@ -1,0 +1,41 @@
+---
+title: "Virgile Dine"
+subtitle: "PhD student — machine unlearning"
+about:
+  template: trestles
+  links:
+    - icon: github
+      text: GitHub
+      href: https://github.com/owl1996
+---
+
+## Who
+
+I am Virgile Dine, a PhD student working on **machine unlearning**: given a model trained on a
+dataset $\D$ and a forget set $\Df \subset \D$, how do we produce a model that is
+statistically indistinguishable from one retrained from scratch on
+$\Dr = \D \setminus \Df$ — without paying the cost of full retraining?
+
+## Why this site
+
+Research notes rot when they live in a private notebook. This blog is an attempt
+to keep them:
+
+- **Dated** — so I can reconstruct how an idea evolved.
+- **Formalised** — every idea gets at least one honest equation.
+- **Cited** — claims point at `references.bib`, which feeds straight into the
+  thesis bibliography.
+- **Reusable** — the section structure of each post maps onto a thesis subsection.
+
+## Research interests
+
+- Certified / provable unlearning and its differential-privacy connections
+- Approximate unlearning: influence functions, Newton steps, gradient ascent
+- Evaluating forgetting: membership inference as an audit, not a metric
+- Unlearning in large language models and diffusion models
+- The tension between unlearning, fairness, and model utility
+
+## Colophon
+
+Built with [Quarto](https://quarto.org), written in Markdown + LaTeX, versioned
+with Git, and deployed automatically to GitHub Pages via GitHub Actions.
