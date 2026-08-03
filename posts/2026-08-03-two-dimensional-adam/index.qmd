@@ -259,7 +259,7 @@ gate it:
 $$
 \Delta \;\doteq\; -\,f \odot \mathrm{Agg}(\hat g_1, \hat g_2),
 \qquad
-\mathrm{Agg}(x,y) = \alpha x + \beta y \;\text{ or PCGrad, CAGrad, \dots}
+\mathrm{Agg}(x,y) = \alpha x + \beta y \;\text{ or PCGrad, CAGrad, etc.}
 $$ {#eq-update}
 
 ```text
