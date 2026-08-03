@@ -164,47 +164,25 @@ does: there, extraction and application are the same optimisation trajectory, an
 there is no object left over that can be turned up, turned down, or merely
 measured.
 
-## The logit-difference family, without the label space
+## Why one softmax and not two
 
-A cluster of recent unlearning methods for generative models already computes
-something of the shape of @eq-signal. What they do not have is a single
-distribution to read it from — each assembles the correction out of separately
-trained networks.
+$\Delta M$ is not new as an object. Logit-difference unlearning already computes
+something of that shape: ULD [@ji2024reversing] reads it off an assistant model
+trained beside the original, UCD [@suriyakumar2025ucd] off two proxy models
+differenced against each other. What is new is where it comes from. In both cases
+the correction is *assembled* rather than derived, and assembling costs something
+specific:
 
-**ULD** [@ji2024reversing] trains one assistant model to do two things at once:
-overfit the forget data, and output a uniform distribution on the retain data. The
-release is the logit difference $f - \alpha f_{\text{assist}}$, with $\alpha$ a
-hyperparameter. The uniform target is what makes this work — by softmax
-invariance a constant vector is free, so the assistant's two objectives separate
-into a forget column and an inert one.
+> Separate models mean separate softmaxes, hence independent normalisations. The
+> columns being differenced do not live in a common scale, and the mixing
+> coefficient is the free parameter that glues them back together.
 
-**UCD** [@suriyakumar2025ucd] trains *two* models, one proxying the contaminated
-distribution and one proxying the corrupted model, and differences them in logit
-space. That difference is $\Delta M$ term for term; the correspondence is a
-change of notation.
-
-**Temper-then-tilt** [@block2026temper] is the closest, and comes with
-guarantees. Its tilting function is an implicit computation of the same signal,
-with the proxies never written down; taking the log recovers an update of the
-same type. The tempering step sits outside the construction unless one also
-introduces a softmax temperature.
-
-The common structure is the correction. The common cost is where it comes from:
-
-> Assembling the correction from separate models means separate softmaxes, hence
-> independent normalisations. The columns being differenced do not live in a
-> common scale, and the mixing coefficient is the free parameter that glues them
-> back together.
-
-In 2C every column — $\mathsf r$, $\mathsf f$, and the marginal — falls out of one
-normalisation, so they are directly comparable, and $\Delta M$ is a difference
-between two readings of a single distribution rather than between two models.
-The doubled label space is what makes that possible, and it is what the first two
-of these leave implicit: they are empirical papers, with a second training run
-standing in for a structure that is never written down. Writing it down buys
-something concrete — the admissibility check above applies to *their* proxies too,
-and answers whether the correction they are about to apply is worth applying at
-all.
+In 2C the $\mathsf r$, $\mathsf f$ and marginal columns all fall out of one
+normalisation. $\Delta M$ is then a difference between two readings of a single
+distribution rather than between two models: there is no scale to reconcile, and
+nothing to glue. And because the columns come from a fitted proxy rather than a
+training run, the admissibility check above applies *before* anything is applied
+at all — including to a correction assembled the other way.
 
 ## What else the tag can be
 

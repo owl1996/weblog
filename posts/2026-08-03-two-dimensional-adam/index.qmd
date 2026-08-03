@@ -1,0 +1,336 @@
+---
+title: "A two-dimensional Adam"
+description: "Adam's per-coordinate rescaling is a squashed signal-to-noise ratio. Written that way it extends verbatim to two objectives — and the resulting optimiser, the focus vector, comes with a descent guarantee on both."
+author: "Virgile Dine"
+date: "2026-08-03"
+categories: [optimisation, adam, gradient-conflict, focus-vector, unlearning]
+bibliography: ../../references.bib
+image: gate-light.png
+draft: false
+toc: true
+---
+
+Adam [@kingma2015adam] solves a one-dimensional problem, once per coordinate:
+*given a noisy gradient, how big a step should I take?* Almost every interesting
+training problem today is two-dimensional — fine-tune **and** don't regress,
+align **and** stay capable, unlearn **and** keep the accuracy. The standard
+answer is to sum the two losses and hand the sum to Adam, which throws away
+exactly the information that matters: whether the two objectives actually agreed
+on that coordinate, and whether we had enough data to tell.
+
+> Adam's per-coordinate multiplier is a **squashed signal-to-noise ratio**. Once
+> you write it that way, the two-objective version is forced: replace the scalar
+> soft sign by the probability that the two true gradients *agree in sign*. That
+> object is the **focus vector**, and it is a 2D Adam.
+
+The focus vector comes from my paper on unlearning
+[@dine2025improving], where it is derived as a masking rule. This post drops the
+unlearning and keeps the optimiser, because nothing in it is about forgetting.
+It also argues that the same reading fixes something in ordinary 1D Adam: the
+square root in the denominator is the wrong squashing function, and $\Phi$ is
+the right one.
+
+## Adam is a decision about a sign
+
+Write Adam per coordinate, dropping the bias correction:
+
+$$
+\theta_{t+1} = \theta_t - \eta\,\frac{\hat m_t}{\sqrt{\hat v_t} + \epsilon},
+\qquad
+\hat m_t = \mathrm{EMA}(\hat g_t), \quad \hat v_t = \mathrm{EMA}(\hat g_t^2).
+$$ {#eq-adam}
+
+Model the per-step gradients of coordinate $i$ as $\hat g_t \sim \mathcal{N}(\mu,
+\sigma^2)$, i.i.d. — $\mu$ the true gradient, $\sigma$ the estimation noise.
+Then $\E[\hat m_t] = \mu$ and $\E[\hat v_t] = \mu^2 + \sigma^2$, so the
+multiplier in @eq-adam concentrates on
+
+$$
+\frac{\mu}{\sqrt{\mu^2 + \sigma^2}} \;=\; \frac{s}{\sqrt{1+s^2}}
+\;=:\; \psi_{\mathrm{Adam}}(s),
+\qquad s \doteq \frac{\mu}{\sigma}.
+$$ {#eq-psi-adam}
+
+Adam's step size on a coordinate is **a function of that coordinate's
+signal-to-noise ratio and nothing else**. This is the variance-adaptation
+reading of [@balles2018dissecting]: $\psi_{\mathrm{Adam}}$ is odd, maps $\R \to
+(-1,1)$, is linear near the origin and tends to $\pm 1$, so Adam interpolates
+between plain SGD at low SNR and signSGD [@bernstein2018signsgd] at high SNR.
+The $\epsilon$ in @eq-adam exists only to keep the ratio finite; it is not part
+of the idea.
+
+A quick numerical check that @eq-psi-adam is not an artefact of the
+approximation — simulating @eq-adam with $\beta_1 = 0.9$, $\beta_2 = 0.999$:
+
+| $s$ | $\E[\hat m/\sqrt{\hat v}]$ (simulated) | $s/\sqrt{1+s^2}$ | $2\Phi(s)-1$ |
+|---:|---:|---:|---:|
+| 0.1 | 0.102 | 0.100 | 0.080 |
+| 0.5 | 0.456 | 0.447 | 0.383 |
+| 1.0 | 0.704 | 0.707 | 0.683 |
+| 2.0 | 0.894 | 0.894 | 0.955 |
+| 5.0 | 0.980 | 0.981 | 1.000 |
+
+## The squashing should be $\Phi$, not a square root
+
+So Adam is deciding how much to commit to $\operatorname{sign}(\hat g_i)$ given
+how noisy the estimate is. That is a statistical question with an answer. Under
+the same Gaussian model, with a flat prior on the unknown $\mu$, the posterior
+is $\mu \mid \hat g \sim \mathcal{N}(\hat g, \sigma^2)$, hence
+
+$$
+\mathbb{P}\!\left[\mu > 0 \mid \hat g\right] = \Phi(s),
+\qquad
+\E\!\left[\operatorname{sign}(\mu) \mid \hat g\right] = 2\Phi(s) - 1 \;=:\; \psi_\Phi(s),
+$$ {#eq-psi-phi}
+
+with $\Phi$ the standard Gaussian CDF. $\psi_\Phi$ has every structural property
+of $\psi_{\mathrm{Adam}}$ — odd, bounded by $1$, linear at the origin
+($\psi_\Phi'(0) = \sqrt{2/\pi} \approx 0.80$ against $1$, a constant that the
+learning rate absorbs), sign in the limit — and one that $\psi_{\mathrm{Adam}}$
+lacks: **it is a probability**. The square root is a guess at the shape of a
+function whose exact form the noise model already determines.
+
+::: {.light-content}
+![](squashing-light.svg)
+:::
+
+::: {.dark-content}
+![](squashing-dark.svg)
+:::
+
+*Left: the two squashings against the per-coordinate SNR. Right: how fast each
+commits to the sign. Adam's residual doubt decays polynomially, $1 -
+\psi_{\mathrm{Adam}}(s) \sim 1/2s^2$; the Gaussian CDF's decays like
+$e^{-s^2/2}$.*
+
+The difference is entirely in the tail, and it is large. At $s = 4$ — a
+coordinate whose sign is not seriously in question — Adam still withholds $3\%$
+of the step as if unsure, while $\psi_\Phi$ withholds $0.006\%$. Below $s
+\approx 1$ the ordering flips and $\psi_\Phi$ is the more cautious of the two.
+Adam is thus simultaneously too timid where the signal is clear and too eager
+where it is not, which is precisely the profile you would expect from a
+squashing function chosen for algebraic convenience.
+
+## Two objectives: the focus vector
+
+Now the actual point. Take an objective $U$ to minimise and a constraint $C \le
+0$ to respect, each with its own batch gradient and its own noise
+[@dine2025improving]:
+
+$$
+\hat g_U = g_U + N_U, \quad N_U \sim \mathcal{N}(0; \Sigma_U),
+\qquad
+\hat g_C = g_C + N_C, \quad N_C \sim \mathcal{N}(0; \Sigma_C),
+$$ {#eq-model}
+
+with $N_U \perp N_C$. Per coordinate we now have two SNRs, $s_{U,i}$ and
+$s_{C,i}$, and therefore two soft signs $\psi_\Phi(s_{U,i})$ and
+$\psi_\Phi(s_{C,i})$. A coordinate is safe to move exactly when the two *true*
+gradients point the same way, and the probability of that is available in closed
+form.
+
+::: {#prp-focus name="the focus vector, and the identity"}
+
+&nbsp;
+
+Write $\varphi_U \doteq \Phi\big(\hat g_U/\sqrt{\mathrm{diag}(\Sigma_U)}\big)$
+component-wise, idem for $\varphi_C$. Then
+
+$$
+f_i \;\doteq\; \mathbb{P}\!\left[g_{U,i}\,g_{C,i} > 0 \,\middle|\, \hat g_U, \hat g_C\right]
+\;=\; \varphi_{U,i}\varphi_{C,i} + (1-\varphi_{U,i})(1-\varphi_{C,i})
+$$ {#eq-focus}
+
+and, equivalently,
+
+$$
+\boxed{\;f_i \;=\; \tfrac{1}{2}\Big(1 + \psi_\Phi(s_{U,i})\,\psi_\Phi(s_{C,i})\Big).\;}
+$$ {#eq-identity}
+
+:::
+
+@eq-focus is Prop. 4 of [@dine2025improving]. @eq-identity is one line from it:
+substituting $\varphi = (1+\psi_\Phi)/2$ into @eq-focus, the linear terms
+cancel and only $\tfrac{1}{2}(1 + \psi_\Phi(s_U)\psi_\Phi(s_C))$ survives. But
+that line is the whole story of this post. The focus vector is **the product of
+two Adam multipliers**, rescaled from $[-1,1]$ to $[0,1]$; equivalently, $2f-1 =
+\E[\operatorname{sign}(g_U)\operatorname{sign}(g_C) \mid \hat g_U, \hat g_C]$ is
+a per-coordinate *sign correlation* between the two objectives. One-dimensional
+Adam asks "which way, and how sure am I?"; the two-dimensional version asks the
+same question twice and multiplies the answers.
+
+::: {.light-content}
+![](gate-light.png)
+:::
+
+::: {.dark-content}
+![](gate-dark.png)
+:::
+
+*The gate $f$ as a function of the two SNRs. Along either axis one objective
+carries no signal and $f = \tfrac{1}{2}$: the coordinate is neither trusted nor
+blocked, just half-stepped.*
+
+The update is the aggregate gradient passed through the gate:
+
+$$
+\Delta_{\mathrm{F}} \;\doteq\; -\,f \odot \mathrm{Agg}(\hat g_U, \hat g_C),
+\qquad
+\mathrm{Agg}(x,y) = \alpha x + \beta y, \quad (\alpha,\beta) \in \R_+^2 ,
+$$ {#eq-update}
+
+and if you want the version where *every* quantity is a squashed SNR — the pure
+2D Adam — feed the aggregate through the same soft sign:
+
+$$
+\theta_{t+1} = \theta_t - \eta\,
+\underbrace{\tfrac{1}{2}\big(1 + \psi_\Phi(s_U)\psi_\Phi(s_C)\big)}_{\text{gate}}
+\odot
+\underbrace{\big(\alpha\,\psi_\Phi(s_U) + \beta\,\psi_\Phi(s_C)\big)}_{\text{direction}} .
+$$ {#eq-2dadam}
+
+### What the gate does at the corners
+
+| regime | $f$ | behaviour |
+|---|---|---|
+| both variances $\to 0$ | $\{0,1\}$ | the hard AND-mask [@parascandolo2020learning] on the batch gradients |
+| both variances $\to \infty$ | $1/2$ | halve the learning rate, change nothing else |
+| one objective uninformative | $1/2$ | abstain, half-step |
+| $C = U$ (single objective) | $\tfrac{1}{2}(1+\psi_\Phi(s)^2) \in [\tfrac{1}{2},1]$ | 1D Adam with a confidence-modulated step |
+
+The first two lines are Prop. 7 of [@dine2025improving]. Two structural
+consequences are worth stating on their own. First, $f \ge 0$ always, so the
+gate can attenuate a coordinate but never flip it: unlike projection-based
+conflict resolution [@yu2020gradient; @liu2021conflict], the update is a
+non-negative reweighting of the aggregate direction and never rotates it into
+something the aggregate did not propose. Second, $f$ is bounded in $[0,1]$ by
+construction, so the pathology Adam's $\epsilon$ patches — a vanishing
+denominator blowing up a step — has no analogue here.
+
+The last line of the table deserves its own name. Applied to a single objective,
+@eq-2dadam is Adam whose effective learning rate ranges over $[\eta/2, \eta]$
+according to how confident the coordinate is — a strictly milder,
+better-motivated variant of the $\epsilon$ hack.
+
+## The guarantees
+
+Gating is only interesting if it still descends. It does, on **both** objectives
+at once.
+
+::: {#prp-guarantee name="feasibility in expectation, Prop. 6 of the paper"}
+
+&nbsp;
+
+Let $\mathrm{Agg}$ be the positive combination $\alpha x + \beta y$, $\alpha,
+\beta > 0$, and suppose $\E[\langle \hat g_U, \hat g_C\rangle] = 0$. Then for
+any sufficiently small $\eta > 0$,
+
+$$
+\E\big[U(\theta_0 + \eta \Delta_{\mathrm{F}}(\theta_0))\big] \le U(\theta_0),
+\qquad
+\E\big[C(\theta_0 + \eta \Delta_{\mathrm{F}}(\theta_0))\big] \le 0 .
+$$ {#eq-guarantee}
+
+:::
+
+The mechanism is visible in one expansion. Descent on $U$ needs $\langle
+\Delta_{\mathrm{F}}, \hat g_U\rangle \le 0$, i.e.
+
+$$
+\alpha \sum_i f_i\, \hat g_{U,i}^2 \;+\; \beta \sum_i f_i\, \hat g_{U,i}\hat g_{C,i}
+\;\ge\; 0 .
+$$ {#eq-expansion}
+
+The first sum is non-negative for free, because $f \ge 0$ — that is the whole
+value of a gate that cannot change signs. Only the cross term needs an argument,
+and the paper supplies the cheapest one available: two random vectors in high
+dimension have vanishing inner product, and empirically $\langle \hat g_U, \hat
+g_C\rangle$ sits around $\pm 10^{-5}$ at the start and decays to $\pm 10^{-10}$.
+
+The assumption is in fact stronger than necessary, and in a direction worth
+noting. The cross term in @eq-expansion is not the plain inner product but the
+$f$-weighted one, and $f$ is by construction *large exactly where the product
+$\hat g_{U,i}\hat g_{C,i}$ is positive*. The weighting is positively associated
+with what it weights, so the sum should be biased upward rather than merely
+vanish. A quick simulation — $d = 4000$ coordinates, true gradients drawn
+independently, heterogeneous noise scales, $600$ draws — is unambiguous:
+
+```python
+phi_U, phi_C = norm.cdf(gh_U / s_U), norm.cdf(gh_C / s_C)
+f = phi_U * phi_C + (1 - phi_U) * (1 - phi_C)
+cross_weighted = np.sum(f * gh_U * gh_C)   # > 0 in 600 / 600 draws
+cross_plain    = np.dot(gh_U, gh_C)        # straddles 0, mean ~ 0
+```
+
+The unweighted inner product straddles zero as advertised; the $f$-weighted one
+was positive in every single draw, and both $\langle g_U,
+\Delta_{\mathrm{F}}\rangle$ and $\langle g_C, \Delta_{\mathrm{F}}\rangle$ were
+negative in every draw. So @prp-guarantee holds with room to spare, and the
+honest statement is that the focus weighting *helps* the guarantee instead of
+needing an assumption to survive it. Turning "positively associated" into a
+proof — an FKG-type inequality on the concordance of $f$ with $\hat g_U \odot
+\hat g_C$ — is open.
+
+There is also a trust region. With $\Delta = -m \odot \mathrm{Agg}$, for all $q
+\ge 1$,
+
+$$
+\|\theta - \theta_0\|_q \;\le\; \eta\,\big\|m(\nabla U, \nabla C)(\theta_0)\big\|_0^{1/q}\,
+\big\|\Delta(\theta_0)\big\|_\infty ,
+$$ {#eq-vicinity}
+
+so the step is controlled by how many coordinates the gate opens — and in
+practice that number falls as training proceeds.
+
+## What I would change next
+
+Writing the method as an optimiser exposes a soft spot in its own
+implementation. Algorithm 1 of [@dine2025improving] estimates
+$\sqrt{\mathrm{diag}(\Sigma)}$ by reading off Adam's second moment $\hat v$,
+which is free and convenient. But $\hat v$ estimates $\mu^2 + \sigma^2$, not
+$\sigma^2$, and it is the noise of a *single datum*, not of the batch mean. Two
+consequences:
+
+1. **Feeding a squashed quantity into a squashing function.** The argument
+   handed to $\Phi$ is close to $\psi_{\mathrm{Adam}}(s)$, an $O(1)$ number, so
+   $\varphi$ rarely leaves $(\Phi(-1), \Phi(1)) = (0.16, 0.84)$ and $f$ rarely
+   leaves $(0.27, 0.73)$. The gate is real but it is being applied at low
+   contrast. The fix is to divide by an estimate of $\sigma$ alone — the
+   AdaBelief statistic $\hat v - \hat m^2$ [@zhuang2020adabelief] — so the SNR
+   handed to $\Phi$ is unbounded and the gate can actually saturate.
+2. **Blindness to batch size.** The estimation noise on a mean of $B$ samples is
+   $\sigma/\sqrt{B}$, so the correct argument is $\sqrt{B}\,\hat g/\hat\sigma$.
+   As written, doubling the batch buys no extra confidence — which is exactly
+   the quantity the method claims to reason about.
+
+Both fixes point at the same replacement, $\varphi \leftarrow
+\Phi\big(\lambda\sqrt{B}\,\hat g/\sqrt{\hat v - \hat m^2}\big)$, with $\lambda$
+a temperature. At $B = 256$ the $\sqrt{B} = 16$ factor will saturate the gate
+into the hard AND-mask, so $\lambda$ is doing real work — but it is one
+interpretable hyperparameter replacing the certainty threshold $p$, on a scale
+where $\lambda = 1$ is the statistically honest setting and everything else is a
+deliberate hedge against the Gaussian model being wrong.
+
+## Open questions
+
+- **Q1. More than two objectives.** The closed form generalises immediately:
+  $\mathbb{P}[\text{all } n \text{ agree}] = \prod_k \varphi_k + \prod_k (1 -
+  \varphi_k)$, which decays to $2^{1-n}$ and gates everything shut for moderate
+  $n$. Pairwise gates, or a soft-OR over pairs, are the obvious repairs; which
+  one keeps @prp-guarantee is not obvious.
+- **Q2. Proving the association.** Does $\mathrm{Cov}(f_i, \hat g_{U,i}\hat
+  g_{C,i}) \ge 0$ hold in general under @eq-model? Simulation says yes,
+  emphatically; a proof would let @prp-guarantee drop its hypothesis entirely.
+- **Q3. Does $\Phi$ beat the square root in plain 1D training?** The tail
+  argument says a $\Phi$-Adam should behave like signSGD sooner. That is a
+  cheap experiment on a standard benchmark and I have not run it.
+- **Q4. Beyond Gaussian.** @eq-model is the one modelling choice in the whole
+  construction, and gradient noise is famously heavier-tailed. Swapping $\Phi$
+  for a Student-$t$ CDF changes nothing structurally — @eq-identity survives any
+  symmetric noise family — but it changes the tail, which is where all the
+  action is.
+
+## References
+
+::: {#refs}
+:::
