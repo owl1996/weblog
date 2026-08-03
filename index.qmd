@@ -18,7 +18,7 @@ Welcome. This site is my **public research journal** on machine unlearning.
 
 I write here to think out loud: each post captures one idea, formalises it, and
 records what remains unclear. Posts are deliberately written in a reusable
-structure (*Context / Idea / Formalisation / Open questions / References*) so
+structure (*Context / Idea / Formalisation / References*) so
 that they can be lifted more or less directly into my thesis manuscript later.
 
 Nothing here is peer-reviewed. Expect half-formed ideas, dead ends, and the
