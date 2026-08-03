@@ -1,5 +1,5 @@
 ---
-title: "Certified unlearning compares the wrong two things"
+title: "Classical certified unlearning as a privacy metric compares the wrong two things"
 description: "The retraining reference differs from the released model by a procedure, not just by a record. Removing that bias forces the data space itself to become unlearning-aware."
 author: "Virgile Dine"
 date: "2026-08-03"
@@ -14,7 +14,7 @@ toc: true
 
 Certified unlearning [@guo2020certified; @sekhari2021remember] asks the output of
 an unlearning algorithm $\U$ to be indistinguishable from *retraining from
-scratch* on the retain set. Write $P \approx_{\varepsilon,\delta} Q$ for
+scratch* on the retain set. Write $\mu \approx_{\varepsilon,\delta} \nu$ for
 $(\varepsilon,\delta)$-indistinguishability of two output distributions.
 
 ::: {#def-classical name="certified unlearning (retraining reference)"}
@@ -46,55 +46,56 @@ $$
 \underbrace{\A(\Dr)}_{R:\ \text{$z$ absent, different procedure}}
 $$ {#eq-three}
 
-The quantity that means "how much does the release tell you about $z$" is the
-$P$ / $Q$ gap: one mechanism, one record moved. @eq-classical instead constrains
-the $P$ / $R$ gap, and $P$ and $R$ differ in two ways at once. Writing
-$\varepsilon_{\mathrm{true}}$, $\varepsilon_{\mathrm{meas}}$ and
-$\varepsilon_{\mathrm{proc}}$ for the levels of the pairs $(P,Q)$, $(P,R)$ and
-$(Q,R)$, the triangle inequality gives, up to the usual $\delta$ bookkeeping,
+What the release says about $z$ is the $P$ / $Q$ gap: one mechanism, one record
+moved. @eq-classical constrains the $P$ / $R$ gap instead, and $P$ and $R$
+differ in two ways at once — by the record *and* by the procedure that produced
+them. So any test separating $P$ from $R$ reports a mixture of two signals.
+
+The second signal is the $Q$ / $R$ gap: how far *unlearning a dataset that never
+contained $z$* is from *training on that same dataset from scratch*. It has
+nothing to do with $z$. For any inexact $\U$ it is non-zero, and it does not
+shrink as the leakage about $z$ shrinks — it is still there when there is
+nothing at all to leak. This is a **bias of learning procedure**, not noise, and
+it can push the answer either way.
+
+Removing it costs one substitution: replace $R$ by $Q$, so the two worlds differ
+by the record and nothing else.
+
+::: {#def-rectified name="rectified certified unlearning"}
+
+For every $\D$, every partition $\D = \Dr \sqcup \Df$, and every $z \in \Df$,
 
 $$
-\bigl|\,\varepsilon_{\mathrm{true}} - \varepsilon_{\mathrm{meas}}\,\bigr|
-\;\le\; \varepsilon_{\mathrm{proc}}.
-$$ {#eq-bias}
+\U\bigl(\A(\D),\, \Dr,\, \Df\bigr)
+\;\approx_{\varepsilon,\delta}\;
+\U\bigl(\A(\D \setminus z),\, \Dr,\, \Df \setminus z\bigr).
+$$ {#eq-rectified}
 
-$\varepsilon_{\mathrm{proc}}$ is the gap between *unlearning a dataset that never
-contained $z$* and *training on that same dataset from scratch*. It has nothing
-to do with $z$. For any inexact $\U$ it is non-zero, it does not shrink as the
-leakage about $z$ shrinks, and @eq-bias is two-sided — so the retraining
-reference is neither an upper nor a lower bound on what it is read as. It is an
-**additive bias of learning procedure**.
+:::
 
-The same bias sits in the audits. U-LiRA and its descendants
+The same bias sits in the audits, and this is where the rectified definition
+already has an empirical counterpart. U-LiRA and its descendants
 [@hayes2024inexact] score unlearned models against *retrained* shadow models:
 the measured ROC separates $P$ from $R$, so a record with no leakage at all
-still registers whatever $\varepsilon_{\mathrm{proc}}$ the algorithm carries.
+still scores whatever procedure gap the algorithm carries.
 RULI [@naderloui2025ruli] is the framework that removes it. Its **Game 2** fixes
 an adversary-chosen target set *before* unlearning and then asks whether a target
 $z$ was trained-then-unlearned or never trained — both worlds releasing the same
-$\U\circ\A$, only the presence of $z$ changing. That is exactly the $P$ / $Q$
-pair, with the procedure held fixed and the bias cancelled by construction.
+$\U\circ\A$, only the presence of $z$ changing. That is exactly @eq-rectified,
+with the procedure held fixed and the bias cancelled by construction.
 
-The rest of this note takes RULI's comparison as the definition, and asks what it
-costs to write it as differential privacy.
+The rest of this note situates @def-rectified against @def-classical, then asks
+what it costs to write it as differential privacy.
 
 ## Formalisation
 
-### The per-example definition
-
-::: {#def-perexample name="per-example certified unlearning"}
-
-$\U$ is $(\varepsilon,\delta)$-per-example-certified if $P$ and $Q$ of
-@eq-three are $(\varepsilon,\delta)$-indistinguishable, for every $\D$, every
-partition $\D = \Dr \sqcup \Df$, and every $z \in \Df$.
-
-:::
+### Rectified versus classical
 
 The two definitions are related, but the gap is exactly group privacy.
 
 ::: {#prp-sufficient name="the retraining model is a pivot"}
 
-@def-classical at $(\varepsilon,\delta)$ implies @def-perexample at
+@def-classical at $(\varepsilon,\delta)$ implies @def-rectified at
 $\bigl(2\varepsilon,\,(1+e^{\varepsilon})\delta\bigr)$.
 
 :::
@@ -104,11 +105,10 @@ $(\D\setminus z)_r = \Dr$. So @def-classical applied to $\D$ and to $\D\setminus
 bounds $(P,R)$ and $(Q,R)$ against the **same** $R$; conclude by the triangle
 inequality. $\square$
 
-Read through @eq-bias, this says @def-classical works by *forcing
-$\varepsilon_{\mathrm{proc}} \le \varepsilon$*: its second instance is precisely
-the demand that unlearning a $z$-free dataset be indistinguishable from training
-on it. The bias is not handled, it is legislated away — at the price of a
-requirement that has nothing to do with protecting $z$.
+Note what the second instance is: it asks $Q \approx R$, i.e. that unlearning a
+$z$-free dataset be indistinguishable from training on it. @def-classical does
+not correct the procedure bias — it forbids it outright. That is why it is
+sufficient, and also why it asks more than protecting $z$ requires.
 
 The pivot also exists only because $z$ is a forget point. For $z \in \Dr$ the
 references are $\A(\Dr)$ and $\A(\Dr\setminus z)$ and @eq-classical says nothing
@@ -116,7 +116,7 @@ references are $\A(\Dr)$ and $\A(\Dr\setminus z)$ and @eq-classical says nothing
 
 ::: {#prp-necessary name="converse, lossy"}
 
-Assume the no-op axiom $\U(\theta,\Dr,\emptyset) = \theta$. Then @def-perexample
+Assume the no-op axiom $\U(\theta,\Dr,\emptyset) = \theta$. Then @def-rectified
 at $(\varepsilon,\delta)$ implies @def-classical at
 $\bigl(k\varepsilon,\;\delta\,\tfrac{e^{k\varepsilon}-1}{e^{\varepsilon}-1}\bigr)$,
 $k = |\Df|$.
@@ -127,7 +127,7 @@ $k = |\Df|$.
 $\U(\A(\Dr),\Dr,\emptyset) = \A(\Dr)$. Constants are the standard group-privacy
 degradation [@dwork2014algorithmic]. $\square$
 
-So @def-classical is the group-level version of @def-perexample at group size
+So @def-classical is the group-level version of @def-rectified at group size
 $|\Df|$: sufficient but wasteful, charging the whole forget-set budget for a
 guarantee audited one record at a time. And the converse needs an axiom usually
 left implicit — any $\U$ that unconditionally takes a gradient step or injects
@@ -135,7 +135,7 @@ noise violates it.
 
 ### The data space has to change
 
-Now try to write @def-perexample as $M(D) \approx M(D\setminus z)$. The
+Now try to write @def-rectified as $M(D) \approx M(D\setminus z)$. The
 obstruction is immediate: $\U\circ\A$ is not a function of a dataset. It takes
 three arguments, and the partition $(\Dr,\Df)$ is an extra input channel — same
 $\D$, different forget request, different output law. There is no mechanism on
@@ -156,7 +156,7 @@ $$
 M(\tilde\D) \;=\; \U\bigl(\A(\pi\tilde\D),\, \pi_{\mathsf r}\tilde\D,\, \pi_{\mathsf f}\tilde\D\bigr)
 $$ {#eq-mechanism}
 
-*is* a mechanism on a dataset, and @def-perexample is literally
+*is* a mechanism on a dataset, and @def-rectified is literally
 $M(\tilde\D) \approx_{\varepsilon,\delta} M(\tilde\D\setminus\tilde z)$ for
 $\tilde z = (x,y,\mathsf{f})$.
 
@@ -183,20 +183,19 @@ nobody states.
 > Unlearning is not a weaker privacy notion. It is differential privacy on a
 > typed data space with an **asymmetric budget** across record types.
 
-The typing also forbids the reflex of substitution-neighbouring. Allow the
-*relabelling* neighbour $\tilde\D_{z:\mathsf r} \sim \tilde\D_{z:\mathsf f}$ —
-same $(x,y)$, status flipped — and it chains with $\varepsilon_{\mathsf f}$ to
+The typing also rules out substitution neighbours. Allow the *relabelling*
+neighbour $\tilde\D_{z:\mathsf r} \sim \tilde\D_{z:\mathsf f}$ — same $(x,y)$,
+status flipped — and chain it with the forget guarantee:
 
 $$
-M(\tilde\D_{z:\mathsf r}) \approx M(\tilde\D_{z:\mathsf f}) \approx M(\tilde\D\setminus z),
+M(\tilde\D_{z:\mathsf r}) \;\approx\; M(\tilde\D_{z:\mathsf f}) \;\approx\; M(\tilde\D\setminus z).
 $$
 
-i.e. keeping $z$ is indistinguishable from never having seen it:
-$\varepsilon_{\mathsf r}$ collapses onto $\varepsilon_{\mathsf f}$ and $\A$
-learns nothing from $z$. The status coordinate is the one coordinate that must
-**not** be protected. Only removal is admissible — a genuine structural
-departure from DP, where removal and substitution differ by a harmless factor
-of two.
+Keeping $z$ as a training point now looks like never having seen it: the two
+budgets collapse into one and $\A$ learns nothing from $z$. So the status is the
+one coordinate that must **not** be protected, and only removal neighbours make
+sense here — unlike in DP, where removal and substitution are interchangeable up
+to a factor of two.
 
 ## Open questions
 
@@ -204,15 +203,14 @@ of two.
   than $k$ adaptive steps, so a better-than-$k\varepsilon$ bound may exist for
   specific $\U$.
 - **Q2.** Without the no-op axiom the chain of @prp-necessary never reaches
-  $\A(\Dr)$, so $\varepsilon_{\mathrm{proc}}$ stays unconstrained and the two
-  definitions become incomparable. Which deployed $\U$ actually satisfy it?
+  $\A(\Dr)$, the procedure gap stays unconstrained, and the two definitions
+  become incomparable. Which deployed $\U$ actually satisfy the axiom?
 - **Q3.** Sequential requests are a composition on $\tilde{\mathcal{Z}}^{*}$ with
   an adaptively chosen status vector. Does the typed budget compose, and does the
   adaptivity failure of @chourasia2023forget survive the reformulation?
-- **Q4.** RULI's shadow models already give the three populations of @eq-three.
-  Estimating $\varepsilon_{\mathrm{proc}}$ directly from them would say how much
-  of the leakage reported by retrain-referenced audits is procedure bias — on
-  standard benchmarks, is it most of it?
+- **Q4.** RULI's shadow models already give the three populations of @eq-three,
+  so the $Q$ / $R$ gap can be measured directly. On standard benchmarks, how much
+  of the leakage reported by retrain-referenced audits is just procedure bias?
 
 ## References
 
