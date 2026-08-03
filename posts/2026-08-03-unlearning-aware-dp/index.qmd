@@ -1,6 +1,6 @@
 ---
 title: "Certified unlearning compares the wrong two things"
-description: "The retraining reference $\\mathcal{A}(\\mathcal{D}_r)$ certifies efficacy, not privacy. Fixing the comparison forces the data space itself to become unlearning-aware."
+description: "The retraining reference differs from the released model by a procedure, not just by a record. Removing that bias forces the data space itself to become unlearning-aware."
 author: "Virgile Dine"
 date: "2026-08-03"
 categories: [certified-unlearning, differential-privacy, definitions, membership-inference]
@@ -32,46 +32,61 @@ This is presented as the unlearning analogue of differential privacy
 
 ## Idea
 
-> @eq-classical compares two *different mechanisms* on two *different inputs*.
-> Differential privacy compares one mechanism on two neighbouring inputs. The
-> second comparison is the one membership-inference audits actually run, and
-> writing it down forces each record to carry its retain/forget status.
+> The retrained model is not the released model minus $z$. It is the released
+> model minus $z$ **and** minus the unlearning procedure. Comparing against it
+> charges that procedure gap to $z$'s privacy budget.
 
-The left of @eq-classical is produced by $\U \circ \A$, the right by $\A$ alone.
-An adversary distinguishing them learns *which pipeline ran* — that unlearning
-happened rather than retraining — which says nothing about any particular $z$.
-@eq-classical is a **fidelity** condition on $\U$, dressed in privacy notation.
+Fix a forget point $z \in \Df$ and name three distributions over released models:
 
-RULI [@naderloui2025ruli] reaches the same split empirically, from the attack
-side, and it is worth borrowing their vocabulary. They separate three games:
-their **Game 3** (*efficacy*) has the adversary tell the unlearned model from the
-initially-trained one; their **Game 2** (*privacy*) fixes an adversary-chosen
-target set before unlearning, then asks whether a target $z$ was trained-then-unlearned
-or never trained at all. Both worlds of Game 2 release the *same* mechanism
-$\U \circ \A$; only the presence of $z$ changes.
+$$
+\underbrace{\U\bigl(\A(\D),\Dr,\Df\bigr)}_{P:\ \text{$z$ present}}
+\qquad
+\underbrace{\U\bigl(\A(\D\setminus z),\Dr,\Df\setminus z\bigr)}_{Q:\ \text{$z$ absent, same procedure}}
+\qquad
+\underbrace{\A(\Dr)}_{R:\ \text{$z$ absent, different procedure}}
+$$ {#eq-three}
 
-@eq-classical certifies Game 3. The literature reads it as a guarantee about
-Game 2. Those are different statements, and the rest of this note makes the
-difference precise.
+The quantity that means "how much does the release tell you about $z$" is the
+$P$ / $Q$ gap: one mechanism, one record moved. @eq-classical instead constrains
+the $P$ / $R$ gap, and $P$ and $R$ differ in two ways at once. Writing
+$\varepsilon_{\mathrm{true}}$, $\varepsilon_{\mathrm{meas}}$ and
+$\varepsilon_{\mathrm{proc}}$ for the levels of the pairs $(P,Q)$, $(P,R)$ and
+$(Q,R)$, the triangle inequality gives, up to the usual $\delta$ bookkeeping,
+
+$$
+\bigl|\,\varepsilon_{\mathrm{true}} - \varepsilon_{\mathrm{meas}}\,\bigr|
+\;\le\; \varepsilon_{\mathrm{proc}}.
+$$ {#eq-bias}
+
+$\varepsilon_{\mathrm{proc}}$ is the gap between *unlearning a dataset that never
+contained $z$* and *training on that same dataset from scratch*. It has nothing
+to do with $z$. For any inexact $\U$ it is non-zero, it does not shrink as the
+leakage about $z$ shrinks, and @eq-bias is two-sided — so the retraining
+reference is neither an upper nor a lower bound on what it is read as. It is an
+**additive bias of learning procedure**.
+
+The same bias sits in the audits. U-LiRA and its descendants
+[@hayes2024inexact] score unlearned models against *retrained* shadow models:
+the measured ROC separates $P$ from $R$, so a record with no leakage at all
+still registers whatever $\varepsilon_{\mathrm{proc}}$ the algorithm carries.
+RULI [@naderloui2025ruli] is the framework that removes it. Its **Game 2** fixes
+an adversary-chosen target set *before* unlearning and then asks whether a target
+$z$ was trained-then-unlearned or never trained — both worlds releasing the same
+$\U\circ\A$, only the presence of $z$ changing. That is exactly the $P$ / $Q$
+pair, with the procedure held fixed and the bias cancelled by construction.
+
+The rest of this note takes RULI's comparison as the definition, and asks what it
+costs to write it as differential privacy.
 
 ## Formalisation
 
 ### The per-example definition
 
-RULI's Game 2, written as a pair of distributions over released models: for
-$z \in \Df$,
-
-$$
-\U\bigl(\A(\D),\, \Dr,\, \Df\bigr)
-\quad\text{versus}\quad
-\U\bigl(\A(\D \setminus z),\, \Dr,\, \Df \setminus z\bigr).
-$$ {#eq-perexample}
-
 ::: {#def-perexample name="per-example certified unlearning"}
 
-$\U$ is $(\varepsilon,\delta)$-per-example-certified if the two distributions of
-@eq-perexample are $(\varepsilon,\delta)$-indistinguishable, for every $\D$,
-every partition, and every $z \in \Df$.
+$\U$ is $(\varepsilon,\delta)$-per-example-certified if $P$ and $Q$ of
+@eq-three are $(\varepsilon,\delta)$-indistinguishable, for every $\D$, every
+partition $\D = \Dr \sqcup \Df$, and every $z \in \Df$.
 
 :::
 
@@ -86,10 +101,16 @@ $\bigl(2\varepsilon,\,(1+e^{\varepsilon})\delta\bigr)$.
 
 *Proof.* For $z \in \Df$, removing $z$ leaves the retain set untouched:
 $(\D\setminus z)_r = \Dr$. So @def-classical applied to $\D$ and to $\D\setminus z$
-certifies both sides of @eq-perexample against the **same** reference $\A(\Dr)$;
-conclude by the triangle inequality. $\square$
+bounds $(P,R)$ and $(Q,R)$ against the **same** $R$; conclude by the triangle
+inequality. $\square$
 
-The pivot exists only because $z$ is a forget point. For $z \in \Dr$ the
+Read through @eq-bias, this says @def-classical works by *forcing
+$\varepsilon_{\mathrm{proc}} \le \varepsilon$*: its second instance is precisely
+the demand that unlearning a $z$-free dataset be indistinguishable from training
+on it. The bias is not handled, it is legislated away — at the price of a
+requirement that has nothing to do with protecting $z$.
+
+The pivot also exists only because $z$ is a forget point. For $z \in \Dr$ the
 references are $\A(\Dr)$ and $\A(\Dr\setminus z)$ and @eq-classical says nothing
 — protecting retain points is $\A$'s job.
 
@@ -114,7 +135,7 @@ noise violates it.
 
 ### The data space has to change
 
-Now try to write @eq-perexample as $M(D) \approx M(D\setminus z)$. The
+Now try to write @def-perexample as $M(D) \approx M(D\setminus z)$. The
 obstruction is immediate: $\U\circ\A$ is not a function of a dataset. It takes
 three arguments, and the partition $(\Dr,\Df)$ is an extra input channel — same
 $\D$, different forget request, different output law. There is no mechanism on
@@ -182,15 +203,16 @@ of two.
 - **Q1.** Is @prp-necessary tight? $\U$ processes all of $\Df$ in one call rather
   than $k$ adaptive steps, so a better-than-$k\varepsilon$ bound may exist for
   specific $\U$.
-- **Q2.** Without the no-op axiom, @def-perexample implies nothing about
-  retraining fidelity. Are the two definitions then simply incomparable — the
-  formal counterpart of RULI's privacy/efficacy split?
+- **Q2.** Without the no-op axiom the chain of @prp-necessary never reaches
+  $\A(\Dr)$, so $\varepsilon_{\mathrm{proc}}$ stays unconstrained and the two
+  definitions become incomparable. Which deployed $\U$ actually satisfy it?
 - **Q3.** Sequential requests are a composition on $\tilde{\mathcal{Z}}^{*}$ with
   an adaptively chosen status vector. Does the typed budget compose, and does the
   adaptivity failure of @chourasia2023forget survive the reformulation?
-- **Q4.** RULI's $\Lambda$ (privacy) and $\Psi$ (efficacy) likelihood-ratio tests
-  estimate the two comparisons separately. Can their gap be read as an empirical
-  lower bound on $\varepsilon_{\mathsf f}$ versus the group-level $k\varepsilon$?
+- **Q4.** RULI's shadow models already give the three populations of @eq-three.
+  Estimating $\varepsilon_{\mathrm{proc}}$ directly from them would say how much
+  of the leakage reported by retrain-referenced audits is procedure bias — on
+  standard benchmarks, is it most of it?
 
 ## References
 
