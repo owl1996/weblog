@@ -3,7 +3,7 @@ title: "Doubling the label space: extracting a concept without training two mode
 description: "The 2C construction: when a secondary binary attribute is known at fit time, promoting it into the label space makes the concept readable as a direction in logit space."
 author: "Virgile Dine"
 date: "2026-08-03"
-categories: [logit-space, concept-extraction, 2C, proxy-models]
+categories: [logit-space, concept-extraction, 2C, proxy-models, contrastive-decoding]
 bibliography: ../../references.bib
 image: ""
 draft: false
@@ -126,7 +126,22 @@ $O(d^2)$ estimated on few points.
 
 ## The signal, and why it is reusable
 
-Once the $2C$ model is fitted, marginalise twice — over both tags, and within the
+The fit itself says whether there is anything to read. Comparing two proxy
+likelihoods — does the full $2C$ model explain the data better than its
+$\mathsf r$-only restriction — answers the question one would otherwise settle by
+training something and looking at the result: *is $s$ actually encoded in this
+representation, at the layer where the proxy is attached?* It is a single sum
+over the dataset, no gradients anywhere, negligible next to one optimisation
+step. A negative answer is information rather than a failure: the concept is not
+linearly present at that layer, and the response is to do nothing, or to change
+proxy family or layer — not to push harder. In the Gaussian family this happens
+systematically when the subgroup is not separated at first and second order, and
+the honest diagnosis is "there is nothing to extract here", not "the method
+missed it". The proxy belongs at an intermediate layer: early layers have no
+class geometry yet, and the last ones are redundant with the logits, so they
+cannot expose a difference the logits do not already express.
+
+When the answer is positive, marginalise twice — over both tags, and within the
 $\mathsf r$ block only — and take the log-difference:
 
 $$
@@ -149,29 +164,35 @@ does: there, extraction and application are the same optimisation trajectory, an
 there is no object left over that can be turned up, turned down, or merely
 measured.
 
-## An admissibility test that doubles as a concept detector
+## The same columns, read from two models instead of one
 
-Before extracting anything, 2C answers a prior question that people usually
-answer by training something and looking at the result:
+Something structurally close already exists in the wild. UCD
+[@suriyakumar2025ucd] trains a second network *deliberately fit to be
+contaminated* — a proxy for $P_{\mathsf f}$ — and subtracts it from the corrupted
+model's logits with a mixing coefficient:
 
-> Is the attribute $s$ actually encoded in this representation, at the layer where
-> the proxy is attached?
+$$
+\log P(\cdot \mid x) \;-\; \alpha \, \log P_{\mathsf f}(\cdot \mid x).
+$$ {#eq-ucd}
 
-The test compares two proxy likelihoods: the concept is exploitable when the full
-$2C$ model explains the data better than its $\mathsf r$-only restriction. That
-is a single sum over the dataset, with no gradient computation anywhere —
-negligible next to one optimisation step.
+In words: push the output away from whatever the forget-proxy finds likely, at a
+strength $\alpha$ picked by hand. The $\mathsf f$ column here is the same object
+2C reads off its own softmax — obtained, in UCD's case, by paying for a second
+training run.
 
-A negative test is information, not a failure. It says the concept is not
-linearly present at that layer, and the correct response is to do nothing, or to
-change proxy family or layer — not to push harder. In the Gaussian family this
-happens systematically when the subgroup is not separated at first and second
-order, and the honest diagnosis is then "there is nothing to extract here", not
-"the method missed it".
+That second run buys a column on the wrong scale:
 
-Where to attach the proxy: an intermediate layer. Early layers have no class
-geometry yet; the last ones are redundant with the logits and therefore cannot
-expose a difference the logits do not already express.
+> Two separate models means two softmaxes, hence two independent normalisations.
+> The columns being subtracted do not live in a common scale, and $\alpha$ is the
+> free parameter that glues them back together.
+
+In 2C every column — $\mathsf r$, $\mathsf f$, and the marginal — falls out of one
+normalisation, so they are directly comparable. $\Delta M$ of @eq-signal is a
+difference between two readings of a single distribution, not between two models,
+and @eq-ucd is just another contrast available from the same fit. The doubled
+label space is what makes that possible, and it is precisely what UCD leaves
+implicit: the work is experimental, and the second network stands in for a
+structure that is never written down.
 
 ## What else the tag can be
 
@@ -188,3 +209,8 @@ These are directions, not validated results. The last row deserves its own
 sentence, though, because it uses the machinery differently: one does not apply
 the correction at all, only measure its magnitude. 2C becomes an instrument
 rather than an intervention.
+
+## References
+
+::: {#refs}
+:::
