@@ -14,9 +14,7 @@ page-layout: full
 title-block-banner: true
 ---
 
-Welcome. This site is my **public research journal** on machine unlearning — the
-problem of making a trained model behave as if it had never seen some subset of
-its training data.
+Welcome. This site is my **public research journal** on machine unlearning.
 
 I write here to think out loud: each post captures one idea, formalises it, and
 records what remains unclear. Posts are deliberately written in a reusable
