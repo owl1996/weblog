@@ -5,7 +5,7 @@ project:
 website:
   title: "Research Notes — Machine Unlearning"
   description: "A research journal on machine unlearning: ideas, formalisations and open questions."
-  site-url: "https://owl1996.github.io/blog"
+  site-url: "https://owl1996.github.io/weblog"
   navbar:
     left:
       - href: index.qmd
@@ -16,7 +16,7 @@ website:
         text: About
     right:
       - icon: github
-        href: https://github.com/owl1996/blog
+        href: https://github.com/owl1996/weblog
         aria-label: GitHub
   page-footer:
     left: "© 2026 Virgile Dine — PhD research notes"

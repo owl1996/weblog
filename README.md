@@ -6,7 +6,7 @@ Formalisation / Open questions / References* — so that notes can be lifted
 into the thesis manuscript later.
 
 **Author:** Virgile Dine
-**Live site:** https://owl1996.github.io/blog
+**Live site:** https://owl1996.github.io/weblog
 
 ## Local development
 
