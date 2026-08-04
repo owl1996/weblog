@@ -1,6 +1,6 @@
 ---
 title: "Classical certified unlearning as a privacy metric compares the wrong two things"
-description: "The retraining reference differs from the released model by a procedure, not just by a record. Removing that bias forces the data space itself to become unlearning-aware."
+description: "The retraining reference differs from the released model by a procedure, not just by a record. Removing that bias forces the data space itself to become unlearning-aware — and makes the forget status public."
 author: "Virgile Dine"
 date: "2026-08-03"
 categories: [certified-unlearning, differential-privacy, definitions, membership-inference]
@@ -36,18 +36,20 @@ This is presented as the unlearning analogue of differential privacy
 > model minus $z$ **and** minus the unlearning procedure. Comparing against it
 > charges that procedure gap to $z$'s privacy budget.
 
-Fix a forget point $z \in \Df$ and name three distributions over released models:
+Fix a forget point $z \in \Df$, let $z'$ be another record put in its place, and
+write $\D^{z\to z'}$ for the dataset with the swap applied. Three distributions
+over released models:
 
 $$
-\underbrace{\U\bigl(\A(\D),\Dr,\Df\bigr)}_{P:\ \text{$z$ present}}
+\underbrace{\U\bigl(\A(\D),\Dr,\Df\bigr)}_{P:\ \text{model saw } z}
 \qquad
-\underbrace{\U\bigl(\A(\D\setminus z),\Dr,\Df\setminus z\bigr)}_{Q:\ \text{$z$ absent, same procedure}}
+\underbrace{\U\bigl(\A(\D^{z\to z'}),\Dr,\Df^{z\to z'}\bigr)}_{Q:\ \text{model saw } z' \text{ instead, same procedure}}
 \qquad
-\underbrace{\A(\Dr)}_{R:\ \text{$z$ absent, different procedure}}
+\underbrace{\A(\Dr)}_{R:\ \text{no } z, \text{ different procedure}}
 $$ {#eq-three}
 
 What the release says about $z$ is the $P$ / $Q$ gap: one mechanism, one record
-moved. @eq-classical constrains the $P$ / $R$ gap instead, and $P$ and $R$
+swapped. @eq-classical constrains the $P$ / $R$ gap instead, and $P$ and $R$
 differ in two ways at once — by the record *and* by the procedure that produced
 them. So any test separating $P$ from $R$ reports a mixture of two signals.
 
@@ -63,18 +65,34 @@ by the record and nothing else.
 
 ::: {#def-rectified name="rectified certified unlearning"}
 
-For every $\D$, every partition $\D = \Dr \sqcup \Df$, and every $z \in \Df$,
+For every $\D$, every partition $\D = \Dr \sqcup \Df$, every $z \in \Df$ and
+every replacement $z'$,
 
 $$
 \U\bigl(\A(\D),\, \Dr,\, \Df\bigr)
 \;\approx_{\varepsilon,\delta}\;
-\U\bigl(\A(\D \setminus z),\, \Dr,\, \Df \setminus z\bigr).
+\U\bigl(\A(\D^{z\to z'}),\, \Dr,\, \Df^{z\to z'}\bigr).
 $$ {#eq-rectified}
 
 :::
 
+Two design choices in that statement are worth spelling out.
+
+**Swap, not delete.** Differential privacy in its bounded form compares datasets
+of *equal size*; a definition built on deletion makes the two worlds differ in
+size as well as in content, which is one more asymmetry to account for. Here $z'$
+takes $z$'s slot inside $\Df$, so both worlds have the same $|\D|$, the same
+$|\Dr|$ and the same $|\Df|$. The comparison is about *which* record was
+processed, never about how many.
+
+**Worst case in the definition, sampled in the audit.** @def-rectified
+quantifies over all pairs $(z, z')$, as a neighbouring relation should. An
+attack cannot: it instantiates $z'$ by drawing a fresh record from the data
+distribution, one the model never saw. That is precisely what a held-out pool is
+for.
+
 Sanity check: take $\U$ to be the identity. @def-rectified collapses to
-$\A(\D) \approx_{\varepsilon,\delta} \A(\D\setminus z)$ — plain differential
+$\A(\D) \approx_{\varepsilon,\delta} \A(\D^{z\to z'})$ — plain differential
 privacy of the learner at $z$. Doing no unlearning at all is admissible exactly
 when the model was already private, which is what a privacy condition should
 say.
@@ -87,21 +105,18 @@ still scores whatever procedure gap the algorithm carries.
 RULI [@naderloui2025ruli] is the framework that removes it. Its **Game 2** fixes
 an adversary-chosen target set *before* unlearning and then asks whether a target
 $z$ was trained-then-unlearned or never trained — both worlds releasing the same
-$\U\circ\A$, only the presence of $z$ changing. That is exactly @eq-rectified,
+$\U\circ\A$, only the identity of the record changing. That is @eq-rectified,
 with the procedure held fixed and the bias cancelled by construction.
 
 Two claims come out of this, and they should not be confused. As a
 **guarantee**, @def-classical is sound: @prp-sufficient below shows it implies
-the per-record statement up to a factor of two. It is merely loose, charging the
-budget of the whole forget set for something audited one record at a time — that
-much is just group privacy. As a **measurement**, the $P$ / $R$ statistic is
-biased, with no determined sign. The second claim is the one worth making.
+the per-record statement up to a factor of two. It is merely stronger than
+needed. As a **measurement**, the $P$ / $R$ statistic is biased, with no
+determined sign. The second claim is the one worth making.
 
 ## Formalisation
 
 ### Rectified versus classical
-
-The two definitions are related, and the gap is exactly group privacy.
 
 ::: {#prp-sufficient name="the retraining model is a pivot"}
 
@@ -110,50 +125,33 @@ $\bigl(2\varepsilon,\,(1+e^{\varepsilon})\delta\bigr)$.
 
 :::
 
-*Proof.* For $z \in \Df$, removing $z$ leaves the retain set untouched:
-$(\D\setminus z)_r = \Dr$. So @def-classical applied to $\D$ and to $\D\setminus z$
-bounds $(P,R)$ and $(Q,R)$ against the **same** $R$; conclude by the triangle
-inequality. $\square$
+*Proof.* Swapping inside $\Df$ leaves the retain set untouched, so @def-classical
+applied to $\D$ and to $\D^{z\to z'}$ bounds $(P,R)$ and $(Q,R)$ against the
+**same** $R$; conclude by the triangle inequality. $\square$
 
 Note what the second instance is: it asks $Q \approx R$, i.e. that unlearning a
 $z$-free dataset be indistinguishable from training on it. @def-classical does
 not correct the procedure bias — it forbids it outright. That is why it is
 sufficient, and also why it asks more than protecting $z$ requires.
 
-The pivot also exists only because $z$ is a forget point. For $z \in \Dr$ the
-references are $\A(\Dr)$ and $\A(\Dr\setminus z)$ and @eq-classical says nothing
+The pivot exists only because $z$ is a forget point. For $z \in \Dr$ the
+references are $\A(\Dr)$ and $\A(\Dr^{z\to z'})$, and @eq-classical says nothing
 — protecting retain points is $\A$'s job.
 
-The converse needs an assumption usually left implicit: that an empty forget
-request is (nearly) a no-op. Demanding it exactly,
-$\U(\theta,\Dr,\emptyset) = \theta$, would be useless — every $\U$ that
-unconditionally takes a gradient step or injects noise fails it, which is most
-inexact ones. So state it approximately.
-
-::: {#prp-necessary name="converse, lossy"}
-
-Suppose $\U(\theta,\Dr,\emptyset) \approx_{\varepsilon_0,\delta_0} \theta$. Then
-@def-rectified at $(\varepsilon,\delta)$ implies @def-classical at
-$\bigl(k\varepsilon + \varepsilon_0,\;
-\delta\,\tfrac{e^{k\varepsilon}-1}{e^{\varepsilon}-1} + e^{k\varepsilon}\delta_0\bigr)$,
-$k = |\Df|$.
-
-:::
-
-*Proof.* Peel the forget points off one at a time — $k$ steps of @def-rectified,
-composing with the standard group-privacy constants [@dwork2014algorithmic] —
-reaching $\U(\A(\Dr),\Dr,\emptyset)$, then one triangle step to $\A(\Dr)$.
-$\square$
-
-So @def-classical is the group-level version of @def-rectified at group size
-$|\Df|$, up to how far $\U$ is from idling on an empty request.
+There is **no converse**, and the size-preserving form is what kills it. A
+deletion-based definition would let one peel forget points off one at a time
+until $\Df$ is empty and the state is $\A(\Dr)$, recovering @def-classical by
+group privacy at group size $|\Df|$. Substitution never shrinks $\Df$, so no
+chain of neighbours reaches $\A(\Dr)$ at all. @def-classical is therefore
+strictly stronger, and the gap is not a mere factor of $|\Df|$: it is the
+procedure requirement, which @def-rectified simply does not express.
 
 ### The data space has to change
 
-Now try to write @def-rectified as $M(D) \approx M(D\setminus z)$. The
-obstruction is immediate: $\U\circ\A$ is not a function of a dataset. It takes
-three arguments, and the partition $(\Dr,\Df)$ is an extra input channel — same
-$\D$, different forget request, different output law. There is no mechanism on
+Now try to write @def-rectified as $M(D) \approx M(D')$. The obstruction is
+immediate: $\U\circ\A$ is not a function of a dataset. It takes three arguments,
+and the partition $(\Dr,\Df)$ is an extra input channel — same $\D$, different
+forget request, different output law. There is no mechanism on
 $\mathcal{Z}^{*}$ to apply DP to.
 
 Move the channel into the records. With
@@ -172,18 +170,18 @@ M(\tilde\D) \;=\; \U\bigl(\A(\pi\tilde\D),\, \pi_{\mathsf r}\tilde\D,\, \pi_{\ma
 $$ {#eq-mechanism}
 
 *is* a mechanism on a dataset, and @def-rectified is literally
-$M(\tilde\D) \approx_{\varepsilon,\delta} M(\tilde\D\setminus\tilde z)$ for
-$\tilde z = (x,y,\mathsf{f})$.
+$M(\tilde\D) \approx_{\varepsilon,\delta} M(\tilde\D')$ for $\tilde\D'$ obtained
+by replacing one $\mathsf{f}$-record with another.
 
 ### Two neighbourhoods, one asymmetry
 
-On $\tilde{\mathcal{Z}}^{*}$ the removal-neighbourhood splits by status, and
+On $\tilde{\mathcal{Z}}^{*}$ the substitution-neighbourhood splits by status, and
 nothing forces one budget on both:
 
 $$
-\tilde\D \sim_{\mathsf f} \tilde\D\setminus(x,y,\mathsf f),
+(x,y,\mathsf f) \;\rightsquigarrow\; (x',y',\mathsf f),
 \qquad
-\tilde\D \sim_{\mathsf r} \tilde\D\setminus(x,y,\mathsf r).
+(x,y,\mathsf r) \;\rightsquigarrow\; (x',y',\mathsf r).
 $$ {#eq-neighbours}
 
 Call $M$ $(\varepsilon_{\mathsf f},\varepsilon_{\mathsf r})$-private if it is
@@ -204,27 +202,56 @@ $\varepsilon$ for a decade. What is specific here is *what* the typing is: the
 unlearning status, which is not an external annotation about a data subject but
 an **input the mechanism reads**, since $\U$ is a function of $\Df$.
 
-That has a consequence for which neighbours are admissible. Take the
-*relabelling* pair $\tilde\D_{z:\mathsf r} \sim \tilde\D_{z:\mathsf f}$ — same
-$(x,y)$, status flipped — and suppose it were protected at level
-$\varepsilon_{\mathsf{rel}}$. Chaining with the forget guarantee,
+### The status cannot be both protected and useful
+
+@eq-neighbours moves within a type. What about across? Let
+$\tilde\D_{z:\mathsf r}$ and $\tilde\D_{z:\mathsf f}$ be the same dataset with
+one record's status flipped, and suppose that pair were protected at level
+$\varepsilon_{\mathsf{rel}}$ — that an observer could not tell whether $z$ had
+been kept or forgotten. Chaining a relabel, a forget-swap and a relabel back,
 
 $$
-M(\tilde\D_{z:\mathsf r}) \;\approx_{\varepsilon_{\mathsf{rel}}}\; M(\tilde\D_{z:\mathsf f})
-\;\approx_{\varepsilon_{\mathsf f}}\; M(\tilde\D\setminus z),
-$$
+M(\tilde\D_{z:\mathsf r})
+\;\approx_{\varepsilon_{\mathsf{rel}}}\; M(\tilde\D_{z:\mathsf f})
+\;\approx_{\varepsilon_{\mathsf f}}\; M(\tilde\D_{z':\mathsf f})
+\;\approx_{\varepsilon_{\mathsf{rel}}}\; M(\tilde\D_{z':\mathsf r}),
+$$ {#eq-chain}
 
-which forces $\varepsilon_{\mathsf r} \le \varepsilon_{\mathsf f} +
-\varepsilon_{\mathsf{rel}}$: keeping $z$ would look like never having seen it,
-and the asymmetry disappears. So the asymmetric regime is available only when
-the status is treated as **public**. This bans *cross-type* substitution, not
-substitution as such — swapping $(x,y,\mathsf f)$ for $(x',y',\mathsf f)$ within
-a type is a perfectly ordinary neighbourhood, and there the usual removal /
-substitution equivalence up to a factor of two should go through unchanged.
+whose endpoints are a retain-neighbour pair. So
+
+$$
+\varepsilon_{\mathsf r} \;\le\; \varepsilon_{\mathsf f} + 2\,\varepsilon_{\mathsf{rel}}.
+$$ {#eq-price}
+
+@eq-price prices status confidentiality in units of retain privacy, and the
+three ways of reading it do not sit together comfortably.
+
+*Make the status public* ($\varepsilon_{\mathsf{rel}} = \infty$). The asymmetry
+survives and unlearning is a notion distinct from DP. This is also what
+auditability wants: verifying that a request was honoured requires knowing who
+asked [@thudi2022necessity]. But it means publishing, for each subject, whether
+they demanded erasure.
+
+*Protect the status* ($\varepsilon_{\mathsf{rel}} \to 0$). Then
+$\varepsilon_{\mathsf r} \le \varepsilon_{\mathsf f}$: every record is protected
+at the forget budget, $M$ is differentially private outright, and unlearning
+buys nothing that DP training would not have bought. The asymmetry that made the
+notion interesting is exactly what dies.
+
+*Pay for it* (intermediate $\varepsilon_{\mathsf{rel}}$). The gap between the two
+budgets is capped at $2\varepsilon_{\mathsf{rel}}$. Status confidentiality is not
+free and not cheap: it is bought at twice its own rate out of the retain budget.
+
+The uncomfortable part is that the legal setting motivating all of this pushes
+towards the second horn. Under a right-to-erasure regime, *having requested
+erasure* is itself personal data about the subject, and often more revealing
+than dataset membership — it can signal that the person considers the record
+harmful to them. The regime where unlearning is formally distinct from
+differential privacy is the regime where that signal is published.
 
 ## Scope
 
-Three things this does not do.
+Two things this does not do.
 
 It is **static**. @def-rectified fixes one partition and one release. Real
 deployments republish after each request, and requesters choose what to delete
@@ -245,11 +272,6 @@ not settle the *right*.
 
 And the diagnosis is not unprecedented. @chourasia2023forget also reject the
 retraining reference, on adaptivity grounds rather than as a measurement bias.
-
-One caveat for anyone chasing a concrete constant: $|\Df|$ differs by one
-between the two worlds of @eq-rectified, so for any $\U$ whose noise is
-calibrated on the forget-set size, $\varepsilon_{\mathsf f}$ inherits a
-dependence on it.
 
 ## References
 
