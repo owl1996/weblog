@@ -1,0 +1,277 @@
+---
+title: "Certifying a two-task step: the focus gate, and what to do when it fails"
+description: "The feasibility test for a gated two-task update is observable, deterministic and free of any prior. When it fails, the $\\ell_1$-minimal mask repairs it by removing a quarter of a percent of the coordinates — giving a step that is feasible by construction on every batch."
+author: "Virgile Dine"
+date: "2026-08-04"
+categories: [optimisation, multi-task, gradient-conflict, masking, focus-vector]
+bibliography: ../../references.bib
+image: violation-light.svg
+draft: false
+toc: true
+---
+
+Two earlier posts turn out to be the same construction seen from two sides. The
+[$\ell_1$ masking post](../2026-07-23-l1-gradient-masking/) builds the
+sparsest binary mask making an update align with two task gradients, and gets a
+deterministic guarantee. The [Adam2D post](../2026-08-03-two-dimensional-adam/)
+builds a continuous gate $f$ from the probability that the two true gradients
+agree in sign, and gets a guarantee in expectation. This post joins them.
+
+> The feasibility of a gated step is an *observable, deterministic* property of
+> the batch — no prior, no expectation. When it holds, the gate is certified for
+> free. When it fails, the $\ell_1$-minimal mask repairs it, and on a real
+> problem the repair removes about $0.3\%$ of coordinates.
+
+Notation follows the Adam2D post: two losses $L_1, L_2$, batch gradients $\hat
+g_1, \hat g_2$, per-coordinate noise scales $\sigma_k$, gate $f_i = \tfrac12(1 +
+\psi(s_{1,i})\psi(s_{2,i}))$ with $\psi = 2\Phi(\cdot) - 1$, and the update
+$\Delta = -f \odot (\alpha \hat g_1 + \beta \hat g_2)$.
+
+## Three levels of guarantee
+
+Write the focus-weighted second moments
+
+$$
+\tilde S_{12} \doteq \sum_i f_i \hat g_{1,i}\hat g_{2,i},
+\quad
+\tilde S_{11} \doteq \sum_i f_i \hat g_{1,i}^2,
+\quad
+\tilde S_{22} \doteq \sum_i f_i \hat g_{2,i}^2,
+$$ {#eq-stilde}
+
+and the violation
+
+$$
+V(f) \doteq -\tilde S_{12} - \min\!\Big(\tfrac{\alpha}{\beta}\tilde S_{11},\ \tfrac{\beta}{\alpha}\tilde S_{22}\Big).
+$$ {#eq-viol}
+
+Expanding $\Delta$ against the measured gradients gives $\langle \Delta, \hat
+g_1\rangle = -\alpha \tilde S_{11} - \beta \tilde S_{12}$ and $\langle \Delta,
+\hat g_2\rangle = -\alpha \tilde S_{12} - \beta \tilde S_{22}$, so:
+
+::: {#prp-level1 name="level (i) — empirical, deterministic, free"}
+
+&nbsp;
+
+$V(f) \le 0$ **if and only if** $\langle \Delta, \hat g_1\rangle \le 0$ and
+$\langle \Delta, \hat g_2\rangle \le 0$: the gated step is a descent direction
+for both measured gradients.
+
+:::
+
+There is no probability anywhere in @prp-level1 — it is an algebraic identity,
+verified against the two inner products on $5000$ random draws with $0$
+disagreements. It has exactly the epistemic status of the $\ell_1$ post's
+deterministic result, applied to empirical gradients. And every term is a
+quantity the algorithm already computes, so this level is *checkable at run
+time*, batch by batch.
+
+The two stronger levels are where assumptions enter.
+
+**(ii) In expectation.** To lift the statement from $\hat g$ to the true $g$ one
+needs $\E[g \mid \hat g] = \hat g$, the flat-prior posterior mean. This is not a
+frequentist identity — with $g$ deterministic it is false — and it is the level
+at which the [calibration problem](../2026-08-03-two-dimensional-adam/#calibration-is-where-the-prior-shows-up)
+bites, since the flat prior is measurably overconfident at low SNR.
+
+**(iii) PAC, with a margin.** Certifying at $V(f) \le -\tau$ instead of $V(f)
+\le 0$ buys feasibility on the true gradients with high probability under a
+sub-Gaussian noise model. This is the interesting level, because it *absorbs*
+the miscalibration of level (ii): a prior you do not trust is paid for with a
+larger $\tau$ rather than with a broken guarantee. Algorithmically it costs
+nothing — the stopping condition changes from $0$ to $-\tau$.
+
+Only level (ii) depends on the prior. That is the distinction the Adam2D post
+blurred by presenting the certificate as though it inherited the prior's
+problems; it does not.
+
+## The hybrid
+
+@prp-level1 is a test, not a fix. But the $\ell_1$ post's greedy is a fix, and
+it composes with the gate without modification, because the focus weight
+factors straight out of the score. Removing coordinate $i$ changes $V$ by
+exactly
+
+$$
+\tilde s_i \;=\; f_i\Big(\hat g_{1,i}\hat g_{2,i} + \tfrac{\alpha}{\beta}\hat g_{1,i}^2\Big)
+$$ {#eq-score}
+
+on the branch where $\tfrac{\alpha}{\beta}\tilde S_{11}$ is active, and
+symmetrically with $\tfrac{\beta}{\alpha}\hat g_{2,i}^2$ on the other. This is
+the score of the $\ell_1$ post multiplied by $f_i$ — checked numerically to
+$8\times10^{-14}$, so the transport is exact rather than approximate, and the
+$\mathcal{O}(d \log d)$ optimality argument carries over verbatim with $f_i \hat
+g_{k,i}$ in place of $g_{k,i}$.
+
+```text
+Certified Adam2D — one step
+
+Require: ĝ1, ĝ2 ; σ1, σ2 ; α, β > 0 ; margin τ ≥ 0 ; learning rate η
+
+  f ← ½(1 + ψ(ĝ1/σ1) ⊙ ψ(ĝ2/σ2))            # the focus gate
+  compute S̃11, S̃22, S̃12 ;  V ← −S̃12 − min(α/β·S̃11, β/α·S̃22)
+
+  m ← 1
+  if V > −τ:                                 # certificate fails: repair
+      s̃A ← f ⊙ (ĝ1⊙ĝ2 + (α/β)·ĝ1²)
+      s̃B ← f ⊙ (ĝ1⊙ĝ2 + (β/α)·ĝ2²)
+      πA, πB ← argsort(s̃A), argsort(s̃B)
+      while V > −τ:
+          π ← πA if (α/β)·S̃11 ≤ (β/α)·S̃22 else πB
+          i ← next index of π with m_i = 1
+          if none: return SKIP BATCH          # no feasible mask exists
+          m_i ← 0 ;  update S̃11, S̃22, S̃12, V
+
+  Δ ← −(m ⊙ f) ⊙ (α·ĝ1 + β·ĝ2)
+  θ ← Optimize(θ, Δ, η)
+```
+
+The step this returns satisfies $V \le -\tau$ **by construction**, on every
+batch, without assuming anything about the true gradients. At level (i) that is
+a theorem with no hypotheses; at levels (ii) and (iii) it lifts under the
+respective assumptions. The cost over plain Adam2D is two `argsort` calls and a
+loop that, as measured below, almost never runs long.
+
+### The FAIL case has a meaning
+
+If the greedy exhausts the coordinates without reaching $V \le -\tau$, no binary
+mask makes the step feasible: the two tasks disagree too broadly on this batch
+for any subset of coordinates to satisfy both. Skipping the batch is the honest
+response, and it is the hard counterpart of the soft behaviour the gate already
+has — recall that as the variances grow, $f \to \tfrac12$ and the gate halves
+the learning rate. FAIL is that same abstention taken to its limit: when the
+evidence supports no move at all, do not move.
+
+## Does the certificate ever fail?
+
+If $V(f) \le 0$ always held, the hybrid would be pointless. If it failed
+constantly, the gate alone would be unusable. Measured on the two-task
+adaptation problem of the Adam2D post — MLP, $d = 8970$ parameters, classes 0–4
+retained while 5–9 are learned, 600 steps $\times$ 6 seeds $=$ 3600 batches:
+
+::: {.light-content}
+![](violation-light.svg)
+:::
+
+::: {.dark-content}
+![](violation-dark.svg)
+:::
+
+*Distribution of the conflict-to-budget ratio $r = -\tilde S_{12} /
+\min(\tfrac{\alpha}{\beta}\tilde S_{11}, \tfrac{\beta}{\alpha}\tilde S_{22})$
+over 3600 training batches. The step is feasible for the measured gradients iff
+$r \le 1$. Axis clipped at $\pm2.5$; the extreme tail is discussed below.*
+
+The answer is: rarely, but not never.
+
+| quantity | value |
+|---|---:|
+| batches with $V(f) > 0$ | $9.3\%$ |
+| median $r$ | $0.38$ |
+| 90th percentile of $r$ | $0.97$ |
+| median $r$ among infeasible batches | $1.26$ |
+| coordinates removed by the greedy when it triggers | $0.27\%$ of $d$ ($\approx 24$) |
+| FAIL rate at $\tau = 0$ | $0$ / 3600 |
+
+So the typical batch sits at about $40\%$ of its feasibility budget — comfortable
+— and roughly one batch in eleven crosses the line, usually by a little. When it
+does, removing about two dozen coordinates out of nine thousand restores
+feasibility. The repair is surgical, which is what an $\ell_1$-minimal mask
+should be.
+
+Two caveats on the numbers. First, the maximum $r$ observed is $2051$: when one
+task's gated energy nearly vanishes, the budget collapses and the ratio explodes.
+Those are the batches where FAIL becomes plausible, and indeed raising the margin
+to $\tau = 0.20 \times$ budget produces $0.3$ FAILs per 600 steps. Second, the
+trigger rate rises slightly when the repair is switched on ($9.3\% \to 10.7\%$),
+which is not a bug: repairing changes the trajectory, hence the batches
+subsequently seen.
+
+**On accuracy, the repair does nothing measurable.** New-class accuracy $0.9665
+\pm 0.0028$ without repair against $0.9659 \pm 0.0027$ with; old-class $0.9834
+\pm 0.0021$ against $0.9803 \pm 0.0037$. That is the honest headline: on this
+problem the hybrid buys a guarantee, not performance. Which is arguably the
+point — it converts "feasible in expectation under a prior" into "feasible on
+this batch, provably" at a cost of $0.3\%$ of the coordinates and no measurable
+accuracy. Whether that trade is worth it depends on whether you needed the
+guarantee.
+
+I have not run the unlearning-specific evaluation (rUA, MIA) against the pure
+focus and PROB variants, which is the comparison that would matter for the
+original application.
+
+## Where the single test breaks
+
+Under a proper prior $g_i \sim \mathcal{N}(0, \tau_i^2)$, level (ii) uses $\E[g_i
+\mid \hat g_i] = \lambda_i \hat g_i$ with $\lambda_i = \tau_i^2/(\tau_i^2 +
+\sigma_i^2)$, estimable by pooling $\hat\tau_i^2 = (\widehat{\mathrm{Var}}(\hat
+g_i) - \hat\sigma_i^2)_+$ over a layer. Each $\tilde S$ picks up a $\lambda$,
+and the two descent conditions become
+
+$$
+\sum_i m_i\, b_i \;>\; 0
+\quad\text{and}\quad
+\sum_i m_i\, a_i \;>\; 0,
+\qquad
+\begin{aligned}
+b_i &= f_i \lambda_{1,i}\big(\hat g_{1,i}\hat g_{2,i} + \tfrac{\alpha}{\beta}\hat g_{1,i}^2\big),\\
+a_i &= f_i \lambda_{2,i}\big(\hat g_{1,i}\hat g_{2,i} + \tfrac{\beta}{\alpha}\hat g_{2,i}^2\big).
+\end{aligned}
+$$ {#eq-two}
+
+Because $\lambda_1 \ne \lambda_2$ in general, the two constraints weigh the
+cross term differently and no single scalar $V$ exists. This matters more than
+"two tests instead of one": the masking problem becomes *minimise removals
+subject to two linear inequalities*, where a removal can help one constraint and
+hurt the other — measured on random inputs, $45.5\%$ of coordinates have
+opposite signs in $a_i$ and $b_i$. A single sort is then no longer optimal, and
+the $\ell_1$-optimality of the greedy is lost.
+
+Note where the split occurs: **only at level (ii)**. Level (i) never sees
+$\lambda$, so the batch certificate stays single and symmetric no matter how
+heterogeneous the priors are. And everything collapses back to @eq-viol as soon
+as $\lambda_1 \propto \lambda_2$ coordinate-wise — equal prior-to-noise ratios
+across tasks — which is exact numerically to $2\times10^{-15}$.
+
+Structurally this is *the same obstruction* as the $n > 2$ question left open in
+the Adam2D post. Heterogeneous $\lambda$ promotes the two-task case into the
+multi-constraint regime, which is where $n > 2$ lives natively. Solve one and
+you have likely solved the other.
+
+The pragmatic route, untested, is a Lagrangian sweep: sort on $\theta a + (1 -
+\theta) b$ for $\theta$ on a grid, keep the best feasible mask. That is
+$\mathcal{O}(d \log d)$ per $\theta$, and it should be close to optimal because
+$a_i$ and $b_i$ share the kernel $f_i \hat g_{1,i}\hat g_{2,i}$ — though the
+measured correlation between them is only $+0.57$, so the sign conflicts above
+are real and the "close to optimal" is a conjecture, not an argument.
+
+## Open questions
+
+- **Q1. Is the bi-constrained mask problem tractable?** Minimising $\|\mathbf 1
+  - m\|_1$ under two linear inequalities in $m \in \{0,1\}^d$ is a
+  two-constraint knapsack, so NP-hard in general — but the instances here are
+  highly structured ($a$ and $b$ share a kernel). Whether the Lagrangian sweep
+  is exact, approximate with a bound, or merely heuristic is open.
+- **Q2. How should $\tau$ be chosen?** The natural scale is the fluctuation of
+  $V$ under the noise model: set $\tau \approx \kappa \cdot \mathrm{sd}(V)$.
+  Since $V$ is a quadratic form in the batch gradients, $\mathrm{sd}(V)$ is
+  estimable at run time by resampling over the micro-batches already computed
+  for $\sigma$ — no extra gradients. I have not tested whether that recovers a
+  sensible $\kappa$.
+- **Q3. Does the FAIL rate carry signal?** A batch on which no feasible mask
+  exists is a batch where the two tasks are irreconcilable. Tracking that rate
+  over training might be a usable diagnostic for "these objectives cannot both
+  be served", independently of the optimiser.
+
+## Reproducing
+
+`certificate.py` in this post's directory measures the trigger rate, mask size
+and FAIL rate and contains the greedy; `make_figure.py` produces the histogram.
+Both import the model and data from the [Adam2D
+post](../2026-08-03-two-dimensional-adam/)'s `experiment.py`. A few minutes on
+CPU.
+
+## References
+
+::: {#refs}
+:::

@@ -35,9 +35,11 @@ gradient evaluation at all.
 
 The construction comes from [@dine2025improving], where it was derived for one
 particular pair of tasks. Nothing in it depends on that choice, so what follows
-states it for two arbitrary tasks. Two things here are not in the paper: a
-correction to the prior (§[Calibration](#calibration-is-where-the-prior-shows-up))
-and a small ablation (§[Does it help?](#does-it-help)).
+states it for two arbitrary tasks. Three things here are not in the paper: a
+correction to the prior
+(§[Calibration](#calibration-is-where-the-prior-shows-up)), a strictly weaker
+hypothesis for the descent guarantee (§[The guarantee](#the-guarantee)), and a
+small ablation (§[Does it help?](#does-it-help)).
 
 ## What Adam actually computes
 
@@ -321,64 +323,148 @@ stacking $k$ gradients.
 | one task uninformative | $1/2$ | abstain, half-step |
 | $L_2 = L_1$ on a second batch | $\tfrac{1}{2}(1+\psi(s)^2)$ | one task, gated by whether two batches agree |
 
-## The guarantee, and what it does not cover
+## The guarantee
+
+The guarantee in [@dine2025improving] assumes the measured gradients are
+scalarly independent in expectation, $\E[\langle \hat g_1, \hat g_2\rangle] = 0$.
+That hypothesis is stronger than the proof needs, and stronger than one would
+want: since the noises are independent and centred, $\E[\langle \hat g_1, \hat
+g_2\rangle] = \langle g_1, g_2\rangle$, so it says the true gradients are
+*orthogonal* — ruling out aggregate conflict, $\langle g_1, g_2\rangle < 0$,
+which is the case PCGrad and CAGrad exist for. The gate would be guaranteed
+exactly where it is least needed.
+
+It can be replaced by something weaker and more natural. Write the
+**focus-weighted** second moments
+
+$$
+\tilde S_{12} \doteq \sum_i f_i\, \hat g_{1,i}\hat g_{2,i},
+\qquad
+\tilde S_{11} \doteq \sum_i f_i\, \hat g_{1,i}^2 \ge 0,
+\qquad
+\tilde S_{22} \doteq \sum_i f_i\, \hat g_{2,i}^2 \ge 0 ,
+$$ {#eq-stilde}
+
+noting that $\tilde S_{12} = \langle f \odot \hat g_1, \hat g_2\rangle = \langle
+\hat g_1, f \odot \hat g_2\rangle$ is symmetric — the gate can sit on either
+side. Expanding $\Delta$ against the *measured* gradients is pure algebra,
+
+$$
+\langle \Delta, \hat g_1\rangle = -\alpha \tilde S_{11} - \beta \tilde S_{12},
+\qquad
+\langle \Delta, \hat g_2\rangle = -\alpha \tilde S_{12} - \beta \tilde S_{22},
+$$ {#eq-cond}
+
+so both inner products are non-positive if and only if a single scalar
+inequality holds:
+
+$$
+V(f) \doteq -\tilde S_{12} - \min\!\Big(\tfrac{\alpha}{\beta}\tilde S_{11},\ \tfrac{\beta}{\alpha}\tilde S_{22}\Big) \;\le\; 0 .
+$$ {#eq-viol}
+
+Checked against the two conditions on $5000$ random draws, the equivalence is
+exact — $0$ disagreements. Readers of the [$\ell_1$ masking
+post](../2026-07-23-l1-gradient-masking/) will recognise @eq-viol: it is the same
+violation functional, with the binary mask $m$ replaced by the continuous gate
+$f$. The two constructions meet here, which is not a coincidence — the quadratic
+structure is identical and only the weight differs.
+
+### Three levels of guarantee
+
+It is worth separating what @eq-viol buys at three different strengths, because
+only one of the three depends on a prior.
+
+**(i) Empirical, deterministic, free.** @eq-cond involves no probability at all:
+$V(f) \le 0$ *is* the statement that $\Delta$ is a feasible direction for the
+batch gradients $\hat g_1, \hat g_2$. Every term is computed by Algorithm 1
+already, so this level is observable batch by batch and holds with the same
+epistemic status as the deterministic result of the $\ell_1$ post applied to
+empirical gradients. No assumption whatsoever.
+
+**(ii) In expectation, conditional on a prior.** Lifting the statement from
+$\hat g$ to the true $g$ is where the modelling enters, via $\E[g \mid \hat g] =
+\hat g$ — the flat-prior posterior mean, not a frequentist identity; with $g$
+deterministic it is false. This is the level the proposition below states, and
+the level at which the [calibration
+section](#calibration-is-where-the-prior-shows-up) bites.
+
+**(iii) PAC, with a margin.** Certifying at $V(f) \le -\tau$ rather than $V(f)
+\le 0$, with $\tau$ on the scale of the noise, buys feasibility on the true
+gradients with high probability under a sub-Gaussian noise model. This level is
+the interesting one precisely because it absorbs miscalibration: a doubtful
+prior is paid for with a larger margin rather than with a broken guarantee.
 
 ::: {#prp-guarantee name="alignment in expectation"}
 
 &nbsp;
 
-Let $\mathrm{Agg}$ be $\alpha x + \beta y$ with $\alpha, \beta > 0$, and suppose
-$\E[\langle \hat g_1, \hat g_2\rangle] = 0$. Then $\Delta$ of @eq-update is
-aligned with both tasks in expectation, and for small enough $\eta > 0$,
-$\E[L_k(\theta + \eta \Delta)] \le L_k(\theta)$ for $k = 1, 2$
-[@dine2025improving].
+Let $\mathrm{Agg}$ be $\alpha x + \beta y$ with $\alpha, \beta > 0$. If
+$\E[\tilde S_{12}] \ge 0$, then $\Delta$ of @eq-update is aligned with both
+tasks in expectation, and for small enough $\eta > 0$, $\E[L_k(\theta + \eta
+\Delta)] \le L_k(\theta)$ for $k = 1, 2$.
 
 :::
 
-Two caveats, both real.
-
-**The expansion is on the true gradient, not the measured one.** @def-aligned
-asks about $\langle \Delta, g_1\rangle$. Expanding that — not $\langle \Delta,
-\hat g_1\rangle$, which would be circular — gives
+This is strictly weaker than the original hypothesis. Because $f_i \ge
+\tfrac{1}{2}$ exactly when $\hat g_{1,i}\hat g_{2,i} > 0$, the gate up-weights
+agreeing coordinates and down-weights conflicting ones, giving the *pathwise*
+bound
 
 $$
--\langle \Delta, g_1\rangle
-= \alpha \underbrace{\sum_i f_i\, g_{1,i}^2}_{\ge\, 0 \text{ for free}}
-\;+\; \alpha \underbrace{\sum_i f_i\, g_{1,i} N_{1,i}}_{\text{Stein}}
-\;+\; \beta \underbrace{\sum_i f_i\, g_{1,i} \hat g_{2,i}}_{\text{cross-task}} .
-$$ {#eq-expansion}
+\tilde S_{12} \;\ge\; \tfrac{1}{2}\,\langle \hat g_1, \hat g_2\rangle
+$$ {#eq-pathwise}
 
-Only the first sum is free, and it is free because $f \ge 0$ — a gate that cannot
-change signs cannot turn a descent direction into an ascent one. The middle term
-is not zero and cannot be factorised, since $f$ and $N_1$ both depend on the same
-noise; Stein's lemma gives $\E[f_i g_{1,i} N_{1,i}] = \tfrac{\sigma_{1,i}}{2}
-g_{1,i}\,\E[\psi'(s_{1,i})]\,\E[\psi(s_{2,i})]$, whose sign is that of $g_{1,i}
-g_{2,i}$ — positive where the tasks agree, negative where they conflict. It is
-the cross-task structure, not an accident, that decides it.
+— verified over $2000$ draws, minimum slack $+4 \times 10^{2}$ — so
+$\E[\langle \hat g_1, \hat g_2\rangle] \ge 0$ implies $\E[\tilde S_{12}] \ge 0$
+and not conversely. The gap is the whole point: $\E[\tilde S_{12}]$ stays
+positive well into genuine conflict, because $f$ suppresses precisely the
+coordinates that make the plain inner product negative. With $g_2$ drawn at
+correlation $\rho_{\mathrm{task}}$ to $g_1$ — the correlation of the **true
+gradients**, i.e. the degree of conflict, not to be confused with the
+measurement-noise correlation $\rho_i$ of Q1 below — $d = 3000$, 300 draws per
+row:
 
-**The hypothesis excludes aggregate conflict.** Since the noises are independent
-and centred, $\E[\langle \hat g_1, \hat g_2\rangle] = \langle g_1, g_2\rangle$,
-so the hypothesis says the true gradients are *orthogonal*. Conflict in the
-usual sense is $\langle g_1, g_2\rangle < 0$, and the hypothesis rules it out.
-It does not rule out per-coordinate conflict — half the coordinates can disagree
-while the inner product vanishes, and that is the regime the gate is for — but it
-does exclude the aggregate case, which is exactly what PCGrad and CAGrad target.
-The high-dimensional argument for it also assumes independence, which two task
-gradients on one network do not have.
+| $\rho_{\mathrm{task}}$ | $\langle g_1, g_2\rangle$ | $\E[\tilde S_{12}]$ | fraction $> 0$ |
+|---:|---:|---:|---:|
+| $-0.3$ | $-900$ | $+1154$ | 1.00 |
+| $-0.6$ | $-1800$ | $+769$ | 1.00 |
+| $-0.9$ | $-2700$ | $+424$ | 1.00 |
 
-The conclusion nevertheless survives simulation well outside the hypothesis.
-Drawing $g_2$ with a controlled correlation $\rho$ to $g_1$, $d = 4000$, 200
-draws per row:
+So the new hypothesis covers the conflict regime that the old one excluded,
+which is the regime the gate was built for.
 
-| $\rho$ | $0.0$ | $-0.2$ | $-0.5$ | $-0.8$ |
-|---|---:|---:|---:|---:|
-| $\langle g_1, \Delta\rangle \le 0$ | 200/200 | 200/200 | 200/200 | 200/200 |
-| $\langle g_2, \Delta\rangle \le 0$ | 200/200 | 200/200 | 200/200 | 200/200 |
-| descent margin | $-1451$ | $-1115$ | $-655$ | $-240$ |
+**Better still, it need not be assumed.** @eq-viol is *observable*: $\tilde
+S_{11}$, $\tilde S_{22}$, $\tilde S_{12}$ are three inner products over
+quantities Algorithm 1 already computes. A step can therefore be certified
+batch by batch rather than assumed in expectation — and when the test fails, the
+greedy $\ell_1$-minimal masking of the [earlier
+post](../2026-07-23-l1-gradient-masking/) applies unchanged on top of the gate,
+since removing coordinate $i$ changes $V$ by exactly
 
-The margin shrinks as conflict grows but does not change sign. So orthogonality
-looks like an artefact of the proof technique rather than a boundary of the
-method — which is a conjecture, not a theorem.
+$$
+\tilde s_i = f_i\Big(\hat g_{1,i}\hat g_{2,i} + \tfrac{\alpha}{\beta}\hat g_{1,i}^2\Big)
+$$ {#eq-greedy}
+
+on the branch where $\tfrac{\alpha}{\beta}\tilde S_{11}$ is active, and
+symmetrically on the other — the focus weight factors straight out (checked
+numerically to $8\times10^{-14}$). Sorting by $\tilde s_i$ and masking until $V
+\le 0$ gives a hybrid "focus + $\ell_1$-minimal mask" whose feasibility holds by
+construction on every batch.
+
+**Where a proper prior splits the test.** Under $g_i \sim \mathcal{N}(0,
+\tau_i^2)$ the lift uses $\E[g_i \mid \hat g_i] = \lambda_i \hat g_i$ with
+$\lambda_i = \tau_i^2/(\tau_i^2+\sigma_i^2)$, and $\hat\tau_i^2 =
+(\widehat{\mathrm{Var}}(\hat g_i) - \hat\sigma_i^2)_+$ is estimable by pooling
+over a layer, so this is a fix rather than an obstacle. Each $\tilde S$ picks up
+a $\lambda_i$ factor and the equivalence with descent survives ($0$
+disagreements over $3000$ draws) — but the two inequalities then carry
+*different* cross terms, $\sum_i f_i \lambda_{1,i} \hat g_{1,i}\hat g_{2,i}$
+against $\sum_i f_i \lambda_{2,i} \hat g_{1,i}\hat g_{2,i}$, so the single
+scalar $V$ of @eq-viol no longer exists. Note where the split happens: only at
+level (ii). Level (i) never sees $\lambda$, so the batch certificate stays
+single and symmetric. Everything collapses back to @eq-viol as soon as
+$\lambda_1 \propto \lambda_2$ coordinate-wise — equal prior-to-noise ratios
+across tasks — which is exact to $2\times10^{-15}$ numerically.
 
 **The trust region needs restating.** The bound in [@dine2025improving] is
 written with $\|m\|_0$ for a *binary* mask, where the count of selected
@@ -451,10 +537,21 @@ table.
 
 ## Open questions
 
-- **Q1. Does the guarantee extend past orthogonality?** Simulation says the
-  conclusion holds at $\rho = -0.8$; the proof does not. A bound on the Stein
-  and cross-task terms of @eq-expansion in terms of $\langle g_1, g_2\rangle$
-  would settle it.
+- **Q1. Correlated measurement noise.** @eq-model assumes $N_1 \perp N_2$, which
+  fails whenever the two losses see the same samples: a shared fraction $\kappa$
+  of a batch induces $\mathrm{Cov}(N_1, N_2) \approx \tfrac{\kappa}{B}
+  \mathrm{Cov}_{\text{per-sample}}$. The gate generalises exactly — the agreement
+  probability becomes a bivariate orthant probability,
+  $$f_i^{\rho} = \Phi_2(a_i, b_i; \rho_i) + \Phi_2(-a_i, -b_i; \rho_i),
+  \qquad a_i = \hat g_{1,i}/\sigma_{1,i},\ b_i = \hat g_{2,i}/\sigma_{2,i},$$
+  cheap to evaluate via Owen's T, reducing to @eq-focus at $\rho = 0$ and to
+  Sheppard's $\tfrac{1}{2} + \tfrac{\arcsin \rho}{\pi}$ at $a = b = 0$ (both
+  checked). What does *not* survive is the pivot $f_i \ge \tfrac{1}{2}
+  \Leftrightarrow \hat g_{1,i}\hat g_{2,i} > 0$: the neutral level moves to
+  $\tfrac{1}{2} + \tfrac{\arcsin\rho_i}{\pi}$, so @eq-pathwise breaks and with it
+  the original proof — while the @eq-viol route, which needs only $f \ge 0$ and
+  measurability, goes through verbatim. Estimating $\rho_i$ needs the cross
+  covariance, which the optimiser's moments do not carry.
 - **Q2. More than two tasks.** $\mathbb{P}[\text{all } n \text{ agree}] = \prod_k
   \varphi_k + \prod_k (1 - \varphi_k)$ decays to $2^{1-n}$ and gates everything
   shut for moderate $n$. Pairwise gates are the obvious repair.
