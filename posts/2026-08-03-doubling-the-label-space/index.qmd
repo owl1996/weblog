@@ -21,37 +21,37 @@ the result the **2C construction**.
 > models, because joint normalisation turns the attribute into an exploitable
 > direction in logit space.
 
-2C came out of a machine-unlearning problem, but nothing in it is about
-forgetting. What follows is the general version: a way of extracting a concept
-that you already know how to label.
+2C was introduced for machine unlearning [@dine2026exact], but nothing in it is
+about forgetting. What follows is the general version: a way of extracting a
+concept that you already know how to label.
 
 ## Where the normalisation happens
 
-This is the whole point, so it is worth going slowly.
+Everything downstream follows from one choice, so it is worth stating carefully.
+Any model that predicts $y$ ends in a normalisation — scores over candidate
+labels, exponentiated and divided by their sum. The only question is what that
+sum runs over.
 
-**The mixture route.** For each class $y$, treat the two subpopulations as a
-mixture of class-conditional densities:
+**Leave $s$ out of it.** The sum runs over the $C$ labels. The tag is then at best
+a latent split inside each label, invisible to the normaliser, and anything it
+carries has to be recovered after the fact — in practice by fitting a second
+model and differencing the two in logit space. Two models, two normalisations.
 
-$$
-P(x \mid y) \;=\; \bigl(1 - \pi_{\mathsf f}(y)\bigr)\, P_{\mathsf r}(x \mid y)
-\;+\; \pi_{\mathsf f}(y)\, P_{\mathsf f}(x \mid y),
-$$ {#eq-mixture}
-
-then apply Bayes over $C$ classes. In words: each class is a bag containing both
-kinds of points, and the tag lives *inside* the bag. The softmax competition runs
-between $C$ cells; whatever structure $s$ carries is averaged away before the
-normaliser ever sees it.
-
-**The 2C route.** Promote the pair $(y,s)$ to a label in its own right and fit a
-single model on $C \times 2$ cells:
+**Put $s$ in it.** Promote $(y,s)$ to a label in its own right, so the sum runs
+over $C \times 2$ cells:
 
 $$
 P(y, s \mid x) \;=\;
-\frac{\pi(y,s)\, P(x \mid y, s)}
-     {\sum_{y'=1}^{C} \sum_{s' \in \{\mathsf r, \mathsf f\}} \pi(y',s')\, P(x \mid y', s')}.
+\frac{\exp g_{y,s}(x)}
+     {\sum_{y'=1}^{C} \sum_{s' \in \{\mathsf r, \mathsf f\}} \exp g_{y',s'}(x)}.
 $$ {#eq-2c}
 
-In words: one softmax over $2C$ cells, so the $\mathsf r$ and $\mathsf f$ cells
+Here $g$ is whatever scores the cells: the rows of a network's output layer, the
+discriminants of a fitted density model, anything. (For a generative proxy,
+$g_{y,s}(x) = \log \pi(y,s) + \log P(x \mid y,s)$ and @eq-2c is Bayes on the
+product space — but nothing below depends on reading it that way.)
+
+In words: one normalisation over $2C$ cells, so the $\mathsf r$ and $\mathsf f$ cells
 of *every* class compete with each other directly, not just within their own
 class. Class posteriors come back by marginalising, $P(y \mid x) = \sum_s P(y,s
 \mid x)$, so the original task survives — but not for free: the same capacity now
@@ -61,15 +61,12 @@ argument, and I do not have that curve.
 
 Both routes describe the same data. They do not produce the same object:
 
-> Mixing then normalising is not the same as normalising then mixing.
+> The question is not how to combine the two models. It is whether there are two.
 
-@eq-mixture mixes on $X \mid y$; @eq-2c mixes on the posterior. As an identity
-the two agree — same components and same weights, and marginalising @eq-2c
-returns Bayes on @eq-mixture exactly. They come apart once each side is a
-*fitted family* rather than an identity: @eq-mixture has to model $X \mid y$ as a
-mixture, @eq-2c models each cell directly, and those are not the same set of
-estimable models. The slogan is about what one can fit, not about what one can
-write down.
+Scores normalised separately live on unrelated scales, and a difference taken
+across them means something only once someone picks a coefficient. Two columns of
+a single normalisation are already commensurable, and their difference is a
+quantity rather than a direction times a guess.
 
 ```{=html}
 <figure style="margin:2rem 0;">
@@ -124,8 +121,9 @@ attribute classifier is needed: marginalising the other way, $P(s \mid x) =
 \sum_y P(y,s \mid x)$, reads off the same softmax, and it is estimated jointly
 with the class geometry rather than beside it.
 
-**The minority subgroup's covariance is implicitly stabilised.** Take LDA as the
-proxy family. LDA-2C has $2C$ mean vectors but a **single** pooled covariance
+**The minority subgroup can be implicitly stabilised.** This one depends on how
+the cells are scored, so take the Gaussian instantiation as an illustration.
+LDA-2C has $2C$ mean vectors but a **single** pooled covariance
 matrix. The explicit mixture, LDA-Mix, needs two — one of which is estimated on
 the $\mathsf f$ subset alone, which is usually the small one. The richer
 parametrisation is therefore also the cheaper and the better-conditioned; the
@@ -152,18 +150,12 @@ at $\eta = 0$ of the average log-normaliser under the correction — it measures
 which way the correction moves the model at the moment it starts being applied.
 
 So @eq-tau answers, for the price of one sum, the question one would otherwise
-settle by training something and looking at the result: *is $s$ actually encoded
-in this representation, at the layer where the proxy is attached?* A
-non-negative answer is information rather than a
-failure: the two readings coincide, so there is no direction to extract, and the
-response is to do nothing or to change proxy family or layer — not to push
-harder. In the Gaussian family this happens when the subgroup is not separated in
-the moments the proxy can see: means only, under a pooled covariance, and means
-plus covariances if one moves to QDA. The honest diagnosis is then "there is
-nothing to extract here", not "the method missed it". The proxy belongs at an
-intermediate layer: early layers have no class geometry yet, and the last ones
-are largely redundant with the logits, so they cannot expose a difference the
-logits do not already express.
+settle by training something and looking at the result: *is $s$ visible at all to
+whatever computes the scores $g$?* A non-negative answer is information rather
+than a failure: the two readings coincide, so there is no direction to extract,
+and the response is to do nothing, or to score the cells some other way — not to
+push harder. The honest diagnosis is "there is nothing to extract here", not "the
+method missed it".
 
 When the answer is positive, marginalise twice — over both tags, and within the
 $\mathsf r$ block only — and take the log-difference:
@@ -192,9 +184,9 @@ rather than approximating one.
 It is also a vector in logit space, and can be used in two ways:
 
 - **as a logit processor** — add $\eta \cdot \Delta M(x)$ to the output of an
-  existing model: no weights and no gradients, though the proxy does read one
-  intermediate activation, so this is not black-box in the sense that a
-  logits-only method is;
+  existing model: no weights and no gradients, though $\Delta M$ still has to be
+  computed from whatever representation the scores $g$ read, so this is black-box
+  only relative to that;
 - **by distillation** — fold the correction back into the parameters when the
   network is available.
 
@@ -227,9 +219,9 @@ attribute in place of the conditioning.
 In 2C the $\mathsf r$, $\mathsf f$ and marginal columns all fall out of one
 normalisation. $\Delta M$ is then a difference between two readings of a single
 distribution rather than between two models: there is no scale to reconcile, and
-nothing to glue. And because the columns come from a fitted proxy rather than a
-training run, the admissibility check above applies *before* anything is applied
-at all — including to a correction assembled the other way.
+nothing to glue. And because the columns come from one fit rather than from a
+second training run, the check of @eq-tau applies *before* anything is applied at
+all — including to a correction assembled the other way.
 
 ## What else the tag can be
 
