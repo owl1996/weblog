@@ -54,7 +54,10 @@ $$ {#eq-2c}
 In words: one softmax over $2C$ cells, so the $\mathsf r$ and $\mathsf f$ cells
 of *every* class compete with each other directly, not just within their own
 class. Class posteriors come back by marginalising, $P(y \mid x) = \sum_s P(y,s
-\mid x)$, so nothing is lost at prediction time.
+\mid x)$, so the original task survives — but not for free: the same capacity now
+has to cover $2C$ cells instead of $C$. Whether that costs accuracy on $y$ is an
+empirical question, settled by a curve of accuracy against $C$ rather than by
+argument, and I do not have that curve.
 
 Both routes describe the same data. They do not produce the same object:
 
@@ -133,13 +136,25 @@ there rests on the shared normalisation rather than on parameter count.
 
 ## The signal, and why it is reusable
 
-The fit itself says whether there is anything to read. Comparing the two proxies
-as descriptions of the retain population — does the $\mathsf r$-only reading
-account for it measurably better than the full model does — answers the question
-one would otherwise settle by training something and looking at the result: *is
-$s$ actually encoded in this representation, at the layer where the proxy is
-attached?* It is a single sum over the dataset, no gradients anywhere, negligible
-next to one optimisation step. A negative answer is information rather than a
+The fit itself says whether there is anything to read, and the check is one
+scalar. Write $f(x)$ for the logits of the model being corrected and take
+
+$$
+\tau \;=\; \E\bigl[\, \mathrm{softmax}(f(x))^{\top} \Delta M(x) \,\bigr],
+$$ {#eq-tau}
+
+the average of the offered correction under the model's own predictive
+distribution. It is one pass over the available sample: no gradients, and no
+threshold to choose, because the decision is the sign. $\tau < 0$ says there is a
+direction worth applying; $\tau \ge 0$ says leave the release alone. The sign is
+the right criterion rather than an arbitrary one because $\tau$ is the derivative
+at $\eta = 0$ of the average log-normaliser under the correction — it measures
+which way the correction moves the model at the moment it starts being applied.
+
+So @eq-tau answers, for the price of one sum, the question one would otherwise
+settle by training something and looking at the result: *is $s$ actually encoded
+in this representation, at the layer where the proxy is attached?* A
+non-negative answer is information rather than a
 failure: the two readings coincide, so there is no direction to extract, and the
 response is to do nothing or to change proxy family or layer — not to push
 harder. In the Gaussian family this happens when the subgroup is not separated in
@@ -217,6 +232,20 @@ training run, the admissibility check above applies *before* anything is applied
 at all — including to a correction assembled the other way.
 
 ## What else the tag can be
+
+Worth saying plainly rather than leaving implicit: on generic unlearning, the
+test of @eq-tau will usually return *do nothing*. When $\Df$ is an arbitrary
+subset of the same distribution — a random 5% of the training set, some
+particular user's rows — there is no attribute to encode. $P(s \mid x)$ is not
+learnable, $\Delta M$ is zero up to estimation noise, and leaving the release
+untouched is the correct answer. That is not a failure mode. It is the
+construction reporting, for one sum and before any optimisation, that the request
+it was handed has no geometric content — which is more than the methods that
+would have spent a fine-tuning run discovering the same thing.
+
+The flip side is that it tells you where the construction *does* have content:
+wherever $s$ is a genuine property of $x$ rather than a bookkeeping label. Those
+cases are not the one it came from.
 
 | $s$ encodes | What $\Delta M$ gives |
 |---|---|
