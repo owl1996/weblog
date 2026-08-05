@@ -16,12 +16,19 @@ title-block-banner: true
 
 Welcome. This site is my **public research journal** on machine unlearning.
 
-I write here to think out loud: each post captures one idea, formalises it, and
-records what remains unclear. Posts are deliberately written in a reusable
-structure (*Context / Idea / Formalisation / References*) so
-that they can be lifted more or less directly into my thesis manuscript later.
+I write here to think out loud: each post takes one idea, formalises it, tries to
+break it, and records what remains unclear — so that it can be lifted more or
+less directly into my thesis manuscript later. Whatever plan a post ends up with,
+four things are meant to be there every time: the claim stated in a single
+blockquote before any maths, an honest line between what is proved and what is
+conjectured, a section of open questions, and a *Reproducing* section naming the
+scripts that regenerate every number.
+
+Two threads run through the posts and they cross more than once — see the
+[roadmap](roadmap.qmd) for the reading order and for which posts amend which.
 
 Nothing here is peer-reviewed. Expect half-formed ideas, dead ends, and the
-occasional sign error.
+occasional sign error. When a later post overturns an earlier one, the earlier
+one gets a note at the top rather than a silent edit.
 
 ## Latest posts

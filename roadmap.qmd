@@ -1,0 +1,86 @@
+---
+title: "Roadmap"
+subtitle: "How the posts fit together, and which ones amend which"
+toc: true
+---
+
+The posts here are not independent notes. They form two threads that started
+separately and now cross: one on **optimising against two objectives at once**,
+one on **what unlearning is and how it should be measured**. This page is the
+map — what each post establishes, what it leaves open, and where a later post
+corrects an earlier one.
+
+If you are arriving cold and want a single self-contained post, read
+[Classical certified unlearning as a privacy metric compares the wrong two
+things](posts/2026-08-03-unlearning-aware-dp/): it depends on nothing else here.
+
+## Thread A — two tasks, one step
+
+Given two gradients that disagree, which coordinates of the update deserve to be
+trusted, and can the answer be certified rather than assumed? The thread runs
+from a hard combinatorial construction to a probabilistic one, then folds them
+together, then repairs the noise model underneath.
+
+| # | Post | What it settles | What it leaves open |
+|---|---|---|---|
+| A1 | [Gradient masking for two-task alignment](posts/2026-07-23-l1-gradient-masking/) | Feasibility is two linear inequalities in the mask; an $\mathcal{O}(d\log d)$ greedy, **optimal exactly when the active branch never switches**, with a $d=3$ counterexample showing the condition is necessary | Exact algorithm (Q1); the objection that sparsity is the wrong quantity; reweighting as a closed-form baseline |
+| A2 | [Adam2D: a calibrated agreement gate](posts/2026-08-03-two-dimensional-adam/) | Adam's step is an uncalibrated probability statement; making it explicit gives a per-coordinate gate $f$ that composes with any aggregation and needs no extra gradient | Correlated measurement noise (Q1); $n>2$ tasks (Q2); per-layer priors (Q3) |
+| A3 | [Certifying a two-task step](posts/2026-08-04-certifying-two-task-steps/) | Three levels of guarantee, only one of which uses a prior; the greedy of A1 transports to the gate of A2 exactly; a Pareto-layer reduction and a solver-free optimality certificate | Whether the Lagrangian sweep stays optimal outside this regime (Q1); choosing $\tau_{\mathrm{rel}}$ (Q2) |
+| A4 | [Two losses, one batch](posts/2026-08-05-correlated-batch-noise/) | The independence assumption of A2 fails whenever the two losses share a batch, and the correlation is large in practice; the gate becomes an orthant probability, estimable for nothing | see that post's open questions |
+
+**Where they meet.** A1 and A2 turn out to be the same quadratic seen twice: the
+violation functional $V$ is identical, with A1's binary mask $m$ replaced by A2's
+continuous gate $f$. A3 is the consequence — the gate's feasibility is a
+*deterministic* property of the batch, and when it fails A1's greedy repairs it
+with the focus weight factoring straight out of the score. A4 then goes back
+under A2 and replaces the noise model, which A3 absorbs without changing a line,
+because its certificate reads $f$ as an opaque non-negative weight.
+
+## Thread B — what is being measured
+
+| # | Post | What it settles | What it leaves open |
+|---|---|---|---|
+| B1 | [Classical certified unlearning compares the wrong two things](posts/2026-08-03-unlearning-aware-dp/) | The retraining reference differs from the release by a *procedure*, not only by a record; rectifying it forces an unlearning-aware data space, and prices status confidentiality against retain privacy | Adaptivity and republication; whether confidentiality is the right notion at all |
+| B2 | [Doubling the label space](posts/2026-08-03-doubling-the-label-space/) | One softmax over $2C$ cells makes a known binary attribute readable as a direction; $\Delta M$ is exactly a pointwise mutual information, and its sign test costs one pass | The accuracy-versus-$C$ curve; behaviour beyond the Gaussian instantiation |
+
+B1 is about the *definition* one is certifying against; B2 is about *reading a
+concept off a model* once the forget/retain status is treated as part of the
+label rather than as metadata. They share the move that makes the whole thing
+work: promoting the retain/forget tag from an annotation to a typed coordinate of
+the data.
+
+**Where the threads cross.** The unlearning-aware data space of B1 and the
+doubled label space of B2 are the same augmentation
+$\tilde{\mathcal Z} = \mathcal X \times \mathcal Y \times \{\mathsf r, \mathsf f\}$,
+used for two different purposes — one to state a privacy condition, one to
+extract a direction. And Thread A exists because unlearning is the two-task
+problem where the two gradients conflict *by construction* rather than by
+accident.
+
+## Corrections log
+
+A journal that never contradicts itself is not being written honestly. What has
+been overturned so far, newest first:
+
+| Where | What was claimed | What replaced it |
+|---|---|---|
+| A3, bi-constrained section | "The Lagrangian sweep is optimal only $47\%$ of the time, median gap 1, max 176" | An artefact of a *wrong* MILP solve. An exact-rational weak-duality certificate proves the sweep optimal on **39/39** well-posed instances |
+| A3 vs A2 | A2 presented the batch certificate as inheriting the prior's calibration problems | Only level (ii) depends on the prior; levels (i) and (iii) do not |
+| A2, calibration section | The tempting headline "the posterior is calibrated, Adam is not" | Both are badly calibrated; a flat prior is *worse* than Adam at low SNR. What the probabilistic reading buys is diagnosability, not correctness |
+| A2, trust region | The $\lVert m \rVert_0$ bound of the source paper | Vacuous for a continuous gate ($\lVert f \rVert_0 = d$ a.s.); restated with the same norm on both sides |
+| A1, optimality | "Each removal is the steepest available", presented as optimality | Local descent, not global optimality — and false as stated, since $\tilde s_i$ is the slope of one branch, not of $V = \max(V_A, V_B)$ |
+| A1, algorithm | A greedy without the dominance restriction or the $\tilde s_i \ge 0$ exit | Both guards added; without them the loop reports `FAIL` on feasible instances |
+
+Two open questions have since been answered by a later post rather than by me
+sitting down to answer them: A2's Q1 (correlated noise) by A4, and A1's Q1
+partially by A3 — the *practical* ceiling is a per-instance dual certificate
+costing $\mathcal{O}(d)$, while the complexity question is still open.
+
+## What is not here yet
+
+- A real multi-task benchmark for the gate of A2, against a tuned CAGrad. Every
+  empirical claim in Thread A currently lives on one small problem — an MLP of
+  $8{,}970$ parameters on `digits` — so the setting bias is shared, not just the
+  sample size.
+- The unlearning-specific evaluation (rUA, MIA) of the certified variant of A3.
+- An experiment for B2 at a $C$ large enough for the capacity argument to bite.

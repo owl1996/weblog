@@ -1,9 +1,14 @@
 # Research Notes — Machine Unlearning
 
 A Quarto website used as a public research journal for my PhD on machine
-unlearning. Every post follows the same structure — *Context / Idea /
-Formalisation / Open questions / References* — so that notes can be lifted
-into the thesis manuscript later.
+unlearning, written so that notes can be lifted into the thesis manuscript later.
+
+Posts take whatever plan the argument needs, but four elements are constant: the
+claim in a single blockquote before any maths, an explicit line between proved
+and conjectured, an *Open questions* section, and a *Reproducing* section naming
+the scripts that regenerate every number in the post. `posts/_template/` is a
+starting point for that, not a mould — `roadmap.qmd` records how the published
+posts relate and which ones amend which.
 
 **Author:** Virgile Dine
 **Live site:** https://owl1996.github.io/weblog

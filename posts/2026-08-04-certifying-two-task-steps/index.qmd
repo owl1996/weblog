@@ -88,6 +88,14 @@ Only level (ii) depends on the prior. That is the distinction the Adam2D post
 blurred by presenting the certificate as though it inherited the prior's
 problems; it does not.
 
+The same independence holds of the gate's *noise* model. @prp-level1 reads $f$ as
+an opaque non-negative weight, so a gate built for correlated batch noise
+certifies through it unchanged — see [Two losses, one
+batch](../2026-08-05-correlated-batch-noise/#correctness-is-robust-to-rho-efficiency-is-not),
+where getting the correlation wrong is shown to cost efficiency — on shared
+batches the test fires more than twice as often with the uncorrelated gate — and
+never correctness.
+
 ## The hybrid
 
 @prp-level1 is a test, not a fix. But the $\ell_1$ post's greedy is a fix, and
@@ -166,10 +174,11 @@ prior collapses to $\lambda \equiv 0$, the *strict* constraint $\sum_i m_i a_i >
 g]\rangle = \langle \Delta, \lambda \odot \hat g\rangle = 0 \le 0$, which is
 *trivially satisfied*. Vacuity cuts both ways: the strict certificate fails while
 the descent it was standing in for holds for free. So there is a semantic choice
-to make explicit:
+to make explicit — either
 
-(a) skip the batch, or (b) drop the vacuous constraint and proceed on the other
-task with a reduced step.
+- **(a)** skip the batch, or
+- **(b)** drop the vacuous constraint and proceed on the other task with a
+  reduced step.
 
 The structural point above decides it in practice. If retention is vacuous on
 every step-0 batch, option (a) never lets unlearning start at all, while (b) is
@@ -579,7 +588,7 @@ that suite is worth more than any individual number in the tables above.
 ## Reproducing
 
 In this post's directory: `certificate.py` measures the trigger rate, mask size
-and FAIL rate and contains the greedy; `bicontrained.py` collects the
+and FAIL rate and contains the greedy; `biconstrained.py` collects the
 two-constraint instances, applies the guard-rail and attempts the
 sweep-versus-ILP comparison (including the solution verification that exposed
 the solver's unreliability); `pareto.py` implements the layer extraction of

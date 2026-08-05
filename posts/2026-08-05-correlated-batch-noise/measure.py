@@ -317,11 +317,10 @@ def run(problem, seed, kappa):
                            / (np.linalg.norm(f0 * agg_dir) + 1e-30)),
                 mean_f0=float(f0.mean()), mean_frho=float(frho.mean()),
             ))
-            if step in SAMPLE_AT:
-                samples.append(np.stack([np.abs(rho), rho,
-                                         phi(a0) * phi(b0),
-                                         np.abs(frho - f0), f0, frho, z,
-                                         a0, b0]))
+            if step in SAMPLE_AT:                # kept for the figures only
+                samples.append(np.stack(
+                    [rho, phi(a0) * phi(b0), f0, frho, z]
+                ).astype(np.float32)[:, ::3])
 
         f_full = torch.ones(len(ana))                 # heads are ungated
         f_full[ana] = torch.from_numpy(f0).float()

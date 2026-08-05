@@ -33,6 +33,14 @@ gradient evaluation at all.
 > question puts the modelling assumptions where they can be checked and fixed —
 > and asking it about two tasks gives a gate on their agreement.
 
+::: {.callout-note appearance="simple"}
+This post assumes the two tasks' measurement noises are independent, which holds
+when their batches are drawn separately and fails when they share one. The
+correlated case — the ordinary one — is treated in [Two losses, one
+batch](../2026-08-05-correlated-batch-noise/), which also measures how large the
+correlation actually gets.
+:::
+
 The construction comes from [@dine2025improving], where it was derived for one
 particular pair of tasks. Nothing in it depends on that choice, so what follows
 states it for two arbitrary tasks. Three things here are not in the paper: a
@@ -374,6 +382,15 @@ structure is identical and only the weight differs.
 It is worth separating what @eq-viol buys at three different strengths, because
 only one of the three depends on a prior.
 
+::: {.callout-note appearance="simple"}
+The three levels are stated more carefully — and the hybrid sketched at the end
+of this section is measured — in [Certifying a two-task
+step](../2026-08-04-certifying-two-task-steps/). One correction belongs here
+rather than there: this post presents the batch certificate as though it
+inherited the prior's calibration problems, and it does not. Only level (ii)
+touches the prior at all.
+:::
+
 **(i) Empirical, deterministic, free.** @eq-cond involves no probability at all:
 $V(f) \le 0$ *is* the statement that $\Delta$ is a feasible direction for the
 batch gradients $\hat g_1, \hat g_2$. Every term is computed by Algorithm 1
@@ -551,7 +568,11 @@ table.
   $\tfrac{1}{2} + \tfrac{\arcsin\rho_i}{\pi}$, so @eq-pathwise breaks and with it
   the original proof — while the @eq-viol route, which needs only $f \ge 0$ and
   measurability, goes through verbatim. Estimating $\rho_i$ needs the cross
-  covariance, which the optimiser's moments do not carry.
+  covariance, which the optimiser's moments do not carry — but *aligned*
+  micro-batches do, for nothing. Taken up in full in [Two losses, one
+  batch](../2026-08-05-correlated-batch-noise/), where the correlation is
+  measured rather than assumed away: $\overline{|\rho|} = 0.75$ on a
+  shared-batch retention pair, against $0.055$ when the batches are disjoint.
 - **Q2. More than two tasks.** $\mathbb{P}[\text{all } n \text{ agree}] = \prod_k
   \varphi_k + \prod_k (1 - \varphi_k)$ decays to $2^{1-n}$ and gates everything
   shut for moderate $n$. Pairwise gates are the obvious repair.

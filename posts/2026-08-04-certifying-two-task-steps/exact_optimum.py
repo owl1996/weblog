@@ -19,7 +19,7 @@ Run: python exact_optimum.py
 import numpy as np
 from fractions import Fraction as Fr
 
-import bicontrained as B
+import biconstrained as B
 import certificate as C
 
 

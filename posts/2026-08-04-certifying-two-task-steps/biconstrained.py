@@ -11,7 +11,7 @@ Collects real instances from the digits two-task run, then compares:
   - Lagrangian sweep: sort on theta*a + (1-theta)*b, greedy, best over a grid
   - exact ILP (scipy.optimize.milp / HiGHS)
 
-Run: python bicontrained.py     (~5 min on CPU)
+Run: python biconstrained.py     (~5 min on CPU)
 """
 import os, sys
 import numpy as np
@@ -181,4 +181,4 @@ if __name__ == "__main__":
               (f", >4:{(gaps>4).sum()}" if gaps.max() > 4 else ""))
         rel = gaps / np.maximum(np.array(ex), 1)
         print(f"  relative excess:        median {np.median(rel):.1%}, mean {np.mean(rel):.1%}")
-    np.savez("bicontrained_results.npz", sweep=np.array(sw), exact=np.array(ex))
+    np.savez("biconstrained_results.npz", sweep=np.array(sw), exact=np.array(ex))

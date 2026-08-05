@@ -19,7 +19,7 @@ import numpy as np
 from bisect import bisect_right
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import bicontrained as B
+import biconstrained as B
 
 
 def pareto_layers(a, b, kmax):

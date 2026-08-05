@@ -246,7 +246,7 @@ cases are not the one it came from.
 | Real vs. synthetic | A measure of the model's reliance on generated data |
 | Source vs. target domain | A domain-adaptation signal without retraining |
 | Poisoned vs. benign | Backdoor neutralisation |
-| Demographic subgroup | Audit: $\|\Delta M\|$ quantifies how much the decision depends on $s$ |
+| Demographic subgroup | Audit: $\lVert \Delta M \rVert$ quantifies how much the decision depends on $s$ |
 
 These are directions, not validated results. The last row deserves its own
 sentence, though, because it uses the machinery differently: one does not apply

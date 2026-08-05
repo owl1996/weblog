@@ -5,7 +5,7 @@ author: "Virgile Dine"
 date: "2026-07-23"
 categories: [multi-task, gradient-conflict, optimisation, algorithms]
 bibliography: ../../references.bib
-image: ""
+image: counterexample-light.svg
 draft: false
 toc: true
 ---
@@ -17,6 +17,17 @@ the repair to be a binary mask $m \in \{0,1\}^d$ zeroing as few coordinates as
 possible, gives an $\mathcal{O}(d \log d)$ greedy for it, and — this is the part
 I got wrong on the first pass — establishes exactly when that greedy is optimal
 and exhibits a counterexample showing the condition is necessary.
+
+::: {.callout-note appearance="simple"}
+Two later posts pick this up. [Certifying a two-task
+step](../2026-08-04-certifying-two-task-steps/) shows the greedy below transports
+verbatim to a *continuous* gate — the weight factors straight out of the score of
+@eq-score — and settles the practical half of Q1: an $\mathcal{O}(d)$ weak-duality
+certificate decides optimality per instance, in exact arithmetic and without
+trusting any solver. It also gives a Pareto-layer reduction that shrinks the
+candidate set from $d$ to about $\bar K \ln d$. The complexity question of Q1 is
+still open.
+:::
 
 ## Context
 
@@ -236,6 +247,21 @@ dominance rule prunes nothing.
 | $\{2\}$ ← optimum | $4$ | $1$ | $-1$ — feasible |
 | $\{3\}$ | $8$ | $-3$ | $3$ |
 
+::: {.light-content}
+![](counterexample-light.svg)
+:::
+
+::: {.dark-content}
+![](counterexample-dark.svg)
+:::
+
+*Left: the three coordinates in the $(a,b)$ plane. (I1) confines them to the
+half-plane $a + b \ge 0$, which is why $a_1 = +6$ is forced to sit opposite
+$b_1 = -2$: the steepest coordinate for one branch is pushed to the wrong side
+for the other. Right: the same instance as movements of the total. The greedy
+descends $V_B$ as steeply as it can and lands exactly on the boundary $A = 0$;
+the optimum takes the coordinate that is steepest for neither.*
+
 Initially branch $B$ is active ($V_B = 0 \ge V_A = -6$), and the greedy takes
 $\argmin_i b_i = 1$ since $b_1 = -2 < b_2 = -1$: the steepest step on $V_B$. But
 $a_1 = +6$, so $V_A$ climbs back to $0$ and $V$ does not move. Branch $A$ then
@@ -342,7 +368,9 @@ baseline to beat.
 In this post's directory, `verify.py` regenerates every number in this note: the
 counterexample, the regime table, the dimension scaling and the branch-switch
 split. It brute-forces all $2^d$ masks, so it is limited to $d \le 14$; it runs
-on CPU in a few minutes.
+on CPU in a few minutes. `make_figures.py` draws the figure above, recomputing
+$(a_i, b_i)$ from $g_1, g_2$ and asserting agreement with the table rather than
+hard-coding it.
 
 ## References
 

@@ -1,6 +1,6 @@
 """Figures for the correlated-noise post.
 
-  correlation-{light,dark}.svg  where the noise correlation sits, against where
+  correlation-{light,dark}.png  where the noise correlation sits, against where
                                 the gate is sensitive to it (Lemma 2)
   reliability-{light,dark}.svg  f as a forecast of true-gradient sign agreement
 
@@ -56,11 +56,11 @@ def fig_correlation(d, mode):
     im = None
     for ax, (prob, title) in zip(axes, PROBS):
         s = d[f"samples_{prob}"]
-        rho, sens = s[1], s[2]
+        rho, sens = s[0], s[1]
         style(ax, t)
         im = ax.hist2d(rho, sens, bins=(90, 70),
                        range=[[-1, 1], [0, 0.16]],
-                       cmap=ramp(t["s1"]), norm=LogNorm(vmin=1, vmax=6000),
+                       cmap=ramp(t["s1"]), norm=LogNorm(vmin=1, vmax=2000),
                        rasterized=True)[3]
         x = np.linspace(-1, 1, 400)
         for c in (0.05, 0.10, 0.20):
@@ -137,7 +137,7 @@ def fig_reliability(d, mode):
     ax = axes[1]
     style(ax, t)
     s = d["samples_retain"]
-    f0, frho, z = s[4], s[5], s[6]
+    f0, frho, z = s[2], s[3], s[4]
     ax.plot([0, 0.7], [0, 0.7], lw=1.0, ls=(0, (4, 3)), color=t["muted"],
             zorder=1)
     for f, col, mk, lab in ((f0, t["s1"], "o", r"$f^0$  (Adam2D)"),
@@ -170,10 +170,10 @@ if __name__ == "__main__":
     for prob, _ in PROBS:
         s = d[f"samples_{prob}"]
         print(f"{prob}: {s.shape[1]} coordinate-checkpoints, "
-              f"mean rho = {s[1].mean():+.3f}, "
-              f"mean |df| = {s[3].mean():.4f}, "
+              f"mean rho = {s[0].mean():+.3f}, "
+              f"mean |df| = {np.abs(s[3] - s[2]).mean():.4f}, "
               f"mass with |rho|>0.5 and phi.phi>0.05: "
-              f"{np.mean((s[0] > 0.5) & (s[2] > 0.05)):.1%}")
+              f"{np.mean((np.abs(s[0]) > 0.5) & (s[1] > 0.05)):.1%}")
     for m in ("light", "dark"):
         fig_correlation(d, m)
         fig_reliability(d, m)
