@@ -66,19 +66,32 @@ def sweep(a, b):
     return (best, True) if best is not None else (None, False)
 
 
-def degenerate(a, b, eps=1e-3):
-    """Guard-rail: nothing to certify.
+def degenerate(a, b, eps=1e-3, cond_max=1e12):
+    """Guard-rail: nothing to certify, or nothing a solver can be trusted on.
 
-    If one task's empirical-Bayes prior collapses (lambda == 0 across every
-    layer) its constraint vector vanishes and sum m_i a_i > 0 is unsatisfiable
-    for *any* mask -- vacuously infeasible, not conflicted. Likewise a near-total
-    cancellation means the constraint sits at the numerical floor. Neither is a
-    conflict, and neither should be handed to a mask solver.
+    Three ways an instance is not a genuine conflict:
+
+    1. One task's empirical-Bayes prior collapses (lambda == 0 across every
+       layer): its constraint vector vanishes and sum m_i a_i > 0 is
+       unsatisfiable for *any* mask -- vacuously infeasible, not conflicted.
+    2. Near-total cancellation: |sum| is a negligible fraction of sum|.|, so the
+       constraint sits at the numerical floor.
+    3. Catastrophic coefficient conditioning. These vectors are products of
+       gradients, lambdas and gate values, and their dynamic range reaches 1e22.
+       At that conditioning an MILP solver reports "optimal" on solutions that
+       violate the constraints when checked -- observed in practice, which is
+       why `exact` below verifies every solution it returns.
     """
     sa, sb = np.abs(a).sum(), np.abs(b).sum()
     if sa == 0 or sb == 0:
         return True
-    return min(abs(a.sum()) / sa, abs(b.sum()) / sb) < eps
+    if min(abs(a.sum()) / sa, abs(b.sum()) / sb) < eps:
+        return True
+    for v, s in ((a, sa), (b, sb)):
+        nz = np.abs(v[v != 0])
+        if len(nz) and nz.max() / nz.min() > cond_max:
+            return True
+    return False
 
 
 def exact(a, b):
@@ -99,7 +112,10 @@ def exact(a, b):
                integrality=np.ones(len(cand)), bounds=Bounds(0, 1))
     if not res.success:
         return None, False
-    return int(round(res.x.sum())), True
+    x = np.round(res.x).astype(bool)                 # VERIFY: never trust the status alone
+    if not (A - a[cand][x].sum() > 0 and B - b[cand][x].sum() > 0):
+        return None, False                           # solver claimed optimal on an infeasible point
+    return int(x.sum()), True
 
 
 def collect(seed):
@@ -120,8 +136,8 @@ def collect(seed):
         f = C.focus(g1, s1, g2, s2)
         l1 = layer_lambda(model, g1, s1); l2 = layer_lambda(model, g2, s2)
         cross = g1 * g2
-        b_i = (f * l1 * (cross + (al / be) * g1 * g1)).numpy()
-        a_i = (f * l2 * (cross + (be / al) * g2 * g2)).numpy()
+        b_i = (f * l1 * (cross + (al / be) * g1 * g1)).numpy().astype(np.float64)
+        a_i = (f * l2 * (cross + (be / al) * g2 * g2)).numpy().astype(np.float64)
         if a_i.sum() <= 0 or b_i.sum() <= 0:
             out.append((a_i.copy(), b_i.copy()))
         delta = -f * (al * g1 + be * g2)
