@@ -245,8 +245,9 @@ a per-coordinate sign correlation between the tasks.
 $f = \tfrac{1}{2}$: the coordinate is neither trusted nor blocked, just
 half-stepped.*
 
-Setting the second argument to a noiseless direction — $\sigma_2 \to 0$, so
-$\varphi_2 = \mathbb{1}[\hat g_1 > 0]$ — makes both branches of @eq-focus
+Setting the second argument to the measurement itself — $\hat g_2 \doteq \hat
+g_1$ taken as a noiseless direction, $\sigma_2 \to 0$, so $\varphi_2 =
+\mathbb{1}[\hat g_1 > 0]$ — makes both branches of @eq-focus
 collapse to $\Phi(|s_1|)$, exactly @eq-p1d. This is a statement about the
 *formula*, not an instance of the model: taking the measurement as a second task
 breaks the assumption that $g_2$ is fixed given $\theta$. The one-dimensional
@@ -329,7 +330,7 @@ stacking $k$ gradients.
 | both variances $\to 0$ | $\{0,1\}$ | the hard AND-mask [@parascandolo2020learning] on the measured gradients |
 | both variances $\to \infty$ | $1/2$ | halve the learning rate, change nothing else |
 | one task uninformative | $1/2$ | abstain, half-step |
-| $L_2 = L_1$ on a second batch | $\tfrac{1}{2}(1+\psi(s)^2)$ | one task, gated by whether two batches agree |
+| $L_2 = L_1$ on a second batch | $\tfrac{1}{2}(1+\psi(s^{(1)})\,\psi(s^{(2)}))$ | one task, gated by whether two batches agree |
 
 ## The guarantee
 

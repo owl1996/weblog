@@ -30,6 +30,25 @@ g_1, \hat g_2$, per-coordinate noise scales $\sigma_k$, gate $f_i = \tfrac12(1 +
 \psi(s_{1,i})\psi(s_{2,i}))$ with $\psi = 2\Phi(\cdot) - 1$, and the update
 $\Delta = -f \odot (\alpha \hat g_1 + \beta \hat g_2)$.
 
+This is a long post carrying three separable things, and they can be read
+independently:
+
+1. **the certificate** — [three levels of
+   guarantee](#three-levels-of-guarantee), only one of which uses a prior, and
+   [the hybrid](#the-hybrid) that repairs a step when the test fails;
+2. **the measurement** — [does the certificate ever
+   fail?](#does-the-certificate-ever-fail), where the answer turns out to be
+   less about conflict than about a task starting at its own optimum;
+3. **the two-constraint regime** — [where the single test
+   breaks](#where-the-single-test-breaks) under heterogeneous priors, an
+   [episode with a solver that was
+   wrong](#deciding-it-without-trusting-any-solver), and [a reduction that makes
+   the problem small](#a-reduction-that-makes-the-problem-small).
+
+Someone who only wants the usable result can stop after (1); (3) is a research
+note about a combinatorial problem that happens to be where the construction
+leads.
+
 ## Three levels of guarantee
 
 Write the focus-weighted second moments
@@ -501,6 +520,24 @@ candidate *set* genuinely differed between permutations in several thousand of
 them. So the guarantee is invariant to the tie-break although the decomposition
 is not, which is slightly stronger than what the proof above asserts.
 
+::: {.light-content}
+![](pareto-light.svg)
+:::
+
+::: {.dark-content}
+![](pareto-dark.svg)
+:::
+
+*Left: one of the well-posed instances, symlog on both axes because the
+coefficients span twenty orders of magnitude — this is the conditioning that
+wrecks the solver, drawn. Colour is the Pareto layer toward $(-\infty,-\infty)$;
+the $7{,}924$ grey points are beyond layer $\bar K$ and can be discarded
+outright. What is left is the thin staircase along the lower-left frontier of
+each conflicting quadrant. Right: the reduction across all $35$ well-posed
+instances of this run, against the dominance prefilter $a_i < 0 \vee b_i < 0$
+that the $\ell_1$ post already applies — median $5{,}195$ candidates down to
+$871$, a factor of $5.7$, or $9.7\%$ of $d$.*
+
 The statement is combinatorial and its truth does not depend on $d$, so unlike
 everything else in this section it can be checked without a reference solver, by
 brute force on small instances. Six families — random continuous, positively
@@ -596,9 +633,10 @@ the solver's unreliability); `pareto.py` implements the layer extraction of
 `test_oracle.py` cross-checks the extraction against a naive $\mathcal{O}(d^2)$
 implementation; `exact_optimum.py` produces the exact-rational duality
 certificates;
-`make_figure.py` produces the histogram. All three import the model and data
-from the [Adam2D post](../2026-08-03-two-dimensional-adam/)'s `experiment.py`.
-A few minutes on CPU each.
+`make_figure.py` produces the histogram and `make_pareto_figure.py` the layer
+figure. Everything that touches real gradients imports the model and data from
+the [Adam2D post](../2026-08-03-two-dimensional-adam/)'s `experiment.py`; the
+two test scripts are self-contained. A few minutes on CPU each.
 
 ## References
 

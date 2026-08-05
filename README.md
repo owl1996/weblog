@@ -7,8 +7,9 @@ Posts take whatever plan the argument needs, but four elements are constant: the
 claim in a single blockquote before any maths, an explicit line between proved
 and conjectured, an *Open questions* section, and a *Reproducing* section naming
 the scripts that regenerate every number in the post. `posts/_template/` is a
-starting point for that, not a mould — `roadmap.qmd` records how the published
-posts relate and which ones amend which.
+starting point for that, not a mould. When a post amends an earlier one, the
+earlier one gets a `callout-note` at the top pointing forward rather than a
+silent edit.
 
 **Author:** Virgile Dine
 **Live site:** https://owl1996.github.io/weblog

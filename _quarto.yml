@@ -12,8 +12,6 @@ website:
         text: Home
       - href: posts.qmd
         text: Posts
-      - href: roadmap.qmd
-        text: Roadmap
       - href: about.qmd
         text: About
     right:

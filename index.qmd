@@ -24,8 +24,10 @@ blockquote before any maths, an honest line between what is proved and what is
 conjectured, a section of open questions, and a *Reproducing* section naming the
 scripts that regenerate every number.
 
-Two threads run through the posts and they cross more than once — see the
-[roadmap](roadmap.qmd) for the reading order and for which posts amend which.
+Two threads run through the posts and they cross more than once: one on
+optimising against two objectives at once, one on what unlearning is and how it
+should be measured. Posts that a later one amends carry a note at the top saying
+so.
 
 Nothing here is peer-reviewed. Expect half-formed ideas, dead ends, and the
 occasional sign error. When a later post overturns an earlier one, the earlier
