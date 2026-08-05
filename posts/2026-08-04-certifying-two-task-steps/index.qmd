@@ -106,25 +106,36 @@ g_{k,i}$ in place of $g_{k,i}$.
 ```text
 Certified Adam2D — one step
 
-Require: ĝ1, ĝ2 ; σ1, σ2 ; α, β > 0 ; margin τ ≥ 0 ; learning rate η
+Require: ĝ1, ĝ2 ; σ1, σ2 ; α, β > 0 ; relative margin τ_rel ∈ [0,1) ; ε ; η
 
   f ← ½(1 + ψ(ĝ1/σ1) ⊙ ψ(ĝ2/σ2))            # the focus gate
-  compute S̃11, S̃22, S̃12 ;  V ← −S̃12 − min(α/β·S̃11, β/α·S̃22)
+  compute S̃11, S̃22, S̃12
+  budget ← min(α/β·S̃11, β/α·S̃22)
+  if budget < ε·‖f ⊙ (α·ĝ1 + β·ĝ2)‖²:       # GUARD-RAIL: nothing to certify
+      return SKIP BATCH
+  r ← −S̃12 / budget                          # conflict-to-budget ratio
 
   m ← 1
-  if V > −τ:                                 # certificate fails: repair
+  if r > 1 − τ_rel:                          # certificate fails: repair
       s̃A ← f ⊙ (ĝ1⊙ĝ2 + (α/β)·ĝ1²)
       s̃B ← f ⊙ (ĝ1⊙ĝ2 + (β/α)·ĝ2²)
       πA, πB ← argsort(s̃A), argsort(s̃B)
-      while V > −τ:
+      while r > 1 − τ_rel:
           π ← πA if (α/β)·S̃11 ≤ (β/α)·S̃22 else πB
           i ← next index of π with m_i = 1
           if none: return SKIP BATCH          # no feasible mask exists
-          m_i ← 0 ;  update S̃11, S̃22, S̃12, V
+          m_i ← 0 ;  update S̃11, S̃22, S̃12, r
 
   Δ ← −(m ⊙ f) ⊙ (α·ĝ1 + β·ĝ2)
   θ ← Optimize(θ, Δ, η)
 ```
+
+Two details that only became visible once the thing was run. The threshold is
+**relative** — $r \le 1 - \tau_{\mathrm{rel}}$ rather than $V \le -\tau$ —
+because an absolute margin mixes scales: when the budget collapses, any $\tau >
+0$ eventually produces failures that mean "there is nothing left to certify"
+rather than "the tasks conflict". And the **guard-rail** on the budget separates
+those two situations explicitly, which matters more than it sounds: see below.
 
 The step this returns satisfies $V \le -\tau$ **by construction**, on every
 batch, without assuming anything about the true gradients. At level (i) that is
@@ -166,7 +177,8 @@ The answer is: rarely, but not never.
 
 | quantity | value |
 |---|---:|
-| batches with $V(f) > 0$ | $9.3\%$ |
+| batches with $V(f) > 0$, passive diagnostic | $9.3\%$ |
+| batches with $V(f) > 0$, on-policy with repair | $10.7\%$ |
 | median $r$ | $0.38$ |
 | 90th percentile of $r$ | $0.97$ |
 | median $r$ among infeasible batches | $1.26$ |
@@ -179,13 +191,24 @@ does, removing about two dozen coordinates out of nine thousand restores
 feasibility. The repair is surgical, which is what an $\ell_1$-minimal mask
 should be.
 
-Two caveats on the numbers. First, the maximum $r$ observed is $2051$: when one
-task's gated energy nearly vanishes, the budget collapses and the ratio explodes.
-Those are the batches where FAIL becomes plausible, and indeed raising the margin
-to $\tau = 0.20 \times$ budget produces $0.3$ FAILs per 600 steps. Second, the
-trigger rate rises slightly when the repair is switched on ($9.3\% \to 10.7\%$),
-which is not a bug: repairing changes the trajectory, hence the batches
-subsequently seen.
+**On-policy, the rate is $10.7\%$, not $9.3\%$.** Switching the repair on raises
+the trigger rate, because repairing changes the trajectory and therefore the
+batches subsequently seen. The two numbers describe different things and both
+belong in the table: $9.3\%$ is the passive diagnostic on an unrepaired run,
+$10.7\%$ is the honest figure for the deployed algorithm. Quoting the first while
+running the second would be an endogeneity error.
+
+**The extreme tail is budget collapse, and it happens at the start.** The maximum
+$r$ observed is $2051$; the six events with $r > 10$ all occur within the first
+two steps, and both events with $r > 100$ are at step $0$ exactly. The mechanism
+is the one the guard-rail targets: the model was pretrained on the old classes,
+so at step $0$ the retention gradient is already near zero, $\tilde S_{22}$
+collapses, and the budget with it. Certifying alignment against a vanishing
+gradient is vacuous, not conflicted. Note this is the *opposite* end of training
+from where one would first guess — it is not gradients dying at convergence, it
+is whichever task is already satisfied at initialisation. The trigger rate in
+fact *declines* over training, $10.3\%$ in the first hundred steps against
+$6.3\%$ in the last, as adaptation resolves the conflict.
 
 **On accuracy, the repair does nothing measurable.** New-class accuracy $0.9665
 \pm 0.0028$ without repair against $0.9659 \pm 0.0027$ with; old-class $0.9834
@@ -223,9 +246,11 @@ Because $\lambda_1 \ne \lambda_2$ in general, the two constraints weigh the
 cross term differently and no single scalar $V$ exists. This matters more than
 "two tests instead of one": the masking problem becomes *minimise removals
 subject to two linear inequalities*, where a removal can help one constraint and
-hurt the other — measured on random inputs, $45.5\%$ of coordinates have
-opposite signs in $a_i$ and $b_i$. A single sort is then no longer optimal, and
-the $\ell_1$-optimality of the greedy is lost.
+hurt the other. A single sort is then no longer optimal, and the
+$\ell_1$-optimality of the greedy is lost. (On random inputs $45.5\%$ of
+coordinates carry opposite signs in $a_i$ and $b_i$ — though that figure is
+over *all* coordinates, while only those near the removal frontier are ever
+candidates, so it overstates the effective rate of genuine trade-offs.)
 
 Note where the split occurs: **only at level (ii)**. Level (i) never sees
 $\lambda$, so the batch certificate stays single and symmetric no matter how
@@ -238,26 +263,70 @@ the Adam2D post. Heterogeneous $\lambda$ promotes the two-task case into the
 multi-constraint regime, which is where $n > 2$ lives natively. Solve one and
 you have likely solved the other.
 
-The pragmatic route, untested, is a Lagrangian sweep: sort on $\theta a + (1 -
-\theta) b$ for $\theta$ on a grid, keep the best feasible mask. That is
-$\mathcal{O}(d \log d)$ per $\theta$, and it should be close to optimal because
-$a_i$ and $b_i$ share the kernel $f_i \hat g_{1,i}\hat g_{2,i}$ — though the
-measured correlation between them is only $+0.57$, so the sign conflicts above
-are real and the "close to optimal" is a conjecture, not an argument.
+The obvious heuristic is a Lagrangian sweep: sort on $\theta a + (1-\theta) b$
+for $\theta$ on a grid, greedily remove, keep the best feasible mask.
+$\mathcal{O}(d\log d)$ per $\theta$. But this question does not need a
+conjecture: when the test fails the optimum removes a couple of dozen
+coordinates out of nine thousand, and minimising $\|\mathbf 1 - m\|_1$ under two
+linear inequalities in $m \in \{0,1\}^d$ is a two-constraint knapsack that HiGHS
+solves *exactly* in milliseconds at this size. So the sweep can simply be
+measured against the optimum.
+
+Over 3600 batches of the same run, using per-layer pooled $\lambda_k$ so the two
+tasks genuinely differ:
+
+| | |
+|---|---:|
+| batches failing the **two**-constraint test | $18.0\%$ (against $9.3\%$ for the single-$V$ test) |
+| of those, vacuous — caught by the guard-rail | $16.1\%$ |
+| genuine conflict instances | 543 |
+| ILP infeasible (a true FAIL) | 0 |
+| sweep failed where a feasible mask exists | 0 |
+| sweep exactly optimal | $47.1\%$ |
+| gap (sweep $-$ optimum), median / mean / max | $1$ / $6.8$ / $176$ |
+| relative excess, median | $3.6\%$ |
+
+Three things fall out. **Heterogeneous priors roughly double the failure rate**,
+$9.3\% \to 18.0\%$ — the two-constraint problem is genuinely harder, not a
+technicality. **The guard-rail is not decoration**: $16.1\%$ of the failures are
+instances where one task's empirical-Bayes prior has collapsed to $\lambda \equiv
+0$, so its constraint vector is identically zero and $\sum_i m_i a_i > 0$ is
+unsatisfiable for *any* mask — vacuously infeasible rather than conflicted. Every
+single one of the sweep's 104 apparent failures was of this kind; on genuine
+instances it never fails.
+
+And the sweep is **decent but not optimal**: exact about half the time, median
+excess one coordinate. Its failure mode is specific — where the gap is zero the
+optimum is already large (median 22 removals), and where the gap is positive the
+optimum is tiny while the sweep removes a median of 13. It overshoots precisely
+on the easy instances, where one or two coordinates would have sufficed.
+
+The practical conclusion is blunter than any of that. Timed on the real
+instances, the exact ILP runs at $20.7$ ms against $47.9$ ms for the 21-point
+sweep: **the exact solver is $2.3\times$ faster than the heuristic meant to
+approximate it.** At this problem size there is no reason to use the sweep at
+all. The heuristic question is not so much settled as dissolved.
 
 ## Open questions
 
-- **Q1. Is the bi-constrained mask problem tractable?** Minimising $\|\mathbf 1
-  - m\|_1$ under two linear inequalities in $m \in \{0,1\}^d$ is a
-  two-constraint knapsack, so NP-hard in general — but the instances here are
-  highly structured ($a$ and $b$ share a kernel). Whether the Lagrangian sweep
-  is exact, approximate with a bound, or merely heuristic is open.
-- **Q2. How should $\tau$ be chosen?** The natural scale is the fluctuation of
-  $V$ under the noise model: set $\tau \approx \kappa \cdot \mathrm{sd}(V)$.
-  Since $V$ is a quadratic form in the batch gradients, $\mathrm{sd}(V)$ is
-  estimable at run time by resampling over the micro-batches already computed
-  for $\sigma$ — no extra gradients. I have not tested whether that recovers a
-  sensible $\kappa$.
+- **Q1. Does the bi-constrained problem stay easy at scale?** At $d \approx 10^4$
+  the exact ILP is milliseconds and the question of a heuristic does not arise.
+  Whether that holds at $d \approx 10^8$ — where even forming $a$ and $b$ is a
+  full pass over the parameters — is untested, and it is the regime that
+  matters. The candidate-set pruning ($a_i < 0$ or $b_i < 0$) is what keeps the
+  ILP small, so the relevant quantity is how that set grows with $d$.
+- **Q2. How should $\tau_{\mathrm{rel}}$ be chosen?** The natural scale is the
+  fluctuation of $V$ under the noise model: $\tau \approx \kappa \cdot
+  \mathrm{sd}(V)$, with $\mathrm{sd}(V)$ estimable at run time from the
+  micro-batches already computed for $\sigma$ — no extra gradients. Two
+  precautions before trusting it. $V$ is quadratic only at *frozen* $f$, and $f$
+  depends on the same gradients through $\Phi$, so resampling with $f$ held fixed
+  understates the variance; a jackknife over micro-batches that recomputes the
+  whole pipeline, $f$ included, costs barely more and captures the
+  non-linearity. And the same micro-batches would then serve both to estimate
+  $\sigma$ (hence $f$) and to estimate $\mathrm{sd}(V)$ — an even/odd split
+  removes the double use, at the price of a noisier $\sigma$; without it the
+  bias is higher-order but not zero.
 - **Q3. Does the FAIL rate carry signal?** A batch on which no feasible mask
   exists is a batch where the two tasks are irreconcilable. Tracking that rate
   over training might be a usable diagnostic for "these objectives cannot both
@@ -265,11 +334,12 @@ are real and the "close to optimal" is a conjecture, not an argument.
 
 ## Reproducing
 
-`certificate.py` in this post's directory measures the trigger rate, mask size
-and FAIL rate and contains the greedy; `make_figure.py` produces the histogram.
-Both import the model and data from the [Adam2D
-post](../2026-08-03-two-dimensional-adam/)'s `experiment.py`. A few minutes on
-CPU.
+In this post's directory: `certificate.py` measures the trigger rate, mask size
+and FAIL rate and contains the greedy; `bicontrained.py` collects the
+two-constraint instances and runs the sweep-versus-exact-ILP comparison;
+`make_figure.py` produces the histogram. All three import the model and data
+from the [Adam2D post](../2026-08-03-two-dimensional-adam/)'s `experiment.py`.
+A few minutes on CPU each.
 
 ## References
 
