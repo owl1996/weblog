@@ -41,3 +41,6 @@ Thumbs.db
 .env.local
 
 **/*.quarto_ipynb
+
+# --- Regenerable caches ---------------------------------------------------
+posts/**/shadow_softmax.npz
